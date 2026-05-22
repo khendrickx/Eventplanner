@@ -19,7 +19,7 @@ class EventPlanController extends Controller
 
     public function store(StoreEventPlanRequest $request, Event $event): JsonResponse
     {
-        $this->authorize('update', $event);
+        $this->authorize('editContent', $event);
 
         $sortOrder = $event->plans()->max('sort_order') + 1;
         $plan = $event->plans()->create([
@@ -32,7 +32,7 @@ class EventPlanController extends Controller
 
     public function update(Request $request, EventPlan $plan): JsonResponse
     {
-        $this->authorize('update', $plan->event);
+        $this->authorize('editContent', $plan->event);
         $request->validate(['name' => ['required', 'string', 'max:255']]);
         $plan->update(['name' => $request->name]);
         return response()->json($plan);
@@ -40,7 +40,7 @@ class EventPlanController extends Controller
 
     public function duplicate(EventPlan $plan): JsonResponse
     {
-        $this->authorize('update', $plan->event);
+        $this->authorize('editContent', $plan->event);
 
         $event = $plan->event;
         $copy = $event->plans()->create([
@@ -59,7 +59,7 @@ class EventPlanController extends Controller
 
     public function destroy(EventPlan $plan): JsonResponse
     {
-        $this->authorize('update', $plan->event);
+        $this->authorize('editContent', $plan->event);
 
         if ($plan->event->plans()->count() <= 1) {
             return response()->json(['message' => 'Cannot delete the last plan.'], 422);

@@ -19,6 +19,11 @@ class EventPolicy
 
     public function update(User $user, Event $event): bool
     {
+        return $event->isOwnedBy($user);
+    }
+
+    public function editContent(User $user, Event $event): bool
+    {
         $role = $event->roleFor($user);
         return in_array($role, ['owner', 'editor']);
     }
