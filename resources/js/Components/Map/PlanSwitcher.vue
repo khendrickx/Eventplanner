@@ -56,6 +56,7 @@ function startRename(plan) {
                     class="border rounded px-2 py-1 text-xs w-28"
                     @keyup.enter="renamePlan(plan)"
                     @keyup.escape="renamingId = null"
+                    @blur="renamePlan(plan)"
                     autofocus
                 />
                 <button @click="renamePlan(plan)" class="text-xs text-blue-600">✓</button>
