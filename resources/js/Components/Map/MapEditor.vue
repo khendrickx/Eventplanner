@@ -72,7 +72,7 @@ onMounted(async () => {
     })
 })
 
-onUnmounted(() => map?.remove())
+onUnmounted(() => { map?.remove(); map = null })
 
 // ── Layer switching ──────────────────────────────────────────────────────────
 
@@ -122,7 +122,7 @@ function handlePlanRenamed(plan) {
 
 function handlePlanDeleted(id) {
     plans.value = plans.value.filter(p => p.id !== id)
-    if (activePlanId.value === id) switchPlan(plans.value[0].id)
+    if (activePlanId.value === id && plans.value.length > 0) switchPlan(plans.value[0].id)
 }
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ function featureType(feature) {
 // ── Rendering ────────────────────────────────────────────────────────────────
 
 function renderElements() {
-    if (!map.isStyleLoaded()) return
+    if (!map || !map.isStyleLoaded()) return
 
     const sourceId = 'elements'
     const visibleEls = elements.value.filter(el => !el.is_hidden)
