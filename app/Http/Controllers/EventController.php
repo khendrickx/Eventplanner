@@ -41,6 +41,7 @@ class EventController extends Controller
     public function store(StoreEventRequest $request): RedirectResponse
     {
         $event = $request->user()->events()->create($request->validated());
+        $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
         return redirect()->route('events.show', $event);
     }
 
@@ -101,6 +102,13 @@ class EventController extends Controller
         $copy->user_id = auth()->id();
         $copy->name = $event->name . ' (copy)';
         $copy->save();
+
+        foreach ($event->plans as $plan) {
+            $copy->plans()->create([
+                'name' => $plan->name,
+                'sort_order' => $plan->sort_order,
+            ]);
+        }
 
         return redirect()->route('events.show', $copy);
     }

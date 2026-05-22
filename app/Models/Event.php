@@ -31,6 +31,11 @@ class Event extends Model
         return $this->hasMany(EventInvitation::class);
     }
 
+    public function plans(): HasMany
+    {
+        return $this->hasMany(EventPlan::class)->orderBy('sort_order');
+    }
+
     public function isOwnedBy(User $user): bool
     {
         return $this->user_id === $user->id;

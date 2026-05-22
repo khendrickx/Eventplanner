@@ -155,4 +155,29 @@ class EventCrudTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    public function test_creating_event_automatically_creates_default_plan(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post('/events', ['name' => 'Race 2026']);
+
+        $event = Event::where('name', 'Race 2026')->first();
+        $this->assertCount(1, $event->plans);
+        $this->assertSame('Plan 1', $event->plans->first()->name);
+    }
+
+    public function test_duplicating_event_copies_all_plans(): void
+    {
+        $owner = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $owner->id]);
+        $event->plans()->create(['name' => 'Plan A', 'sort_order' => 1]);
+        $event->plans()->create(['name' => 'Plan B', 'sort_order' => 2]);
+
+        $this->actingAs($owner)->post("/events/{$event->id}/duplicate");
+
+        $copy = Event::where('user_id', $owner->id)->where('id', '!=', $event->id)->first();
+        $this->assertCount(2, $copy->plans);
+        $this->assertSame('Plan A', $copy->plans->first()->name);
+    }
 }
