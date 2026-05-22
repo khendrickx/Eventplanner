@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\EventInvitation;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -19,9 +20,19 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('Auth/Register');
+        $invitationEmail = null;
+        if ($token = $request->query('invitation')) {
+            $invitation = EventInvitation::where('token', $token)
+                ->where('expires_at', '>', now())
+                ->first();
+            $invitationEmail = $invitation?->email;
+        }
+
+        return Inertia::render('Auth/Register', [
+            'invitationEmail' => $invitationEmail,
+        ]);
     }
 
     /**
@@ -46,6 +57,15 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
 
         Auth::login($user);
+
+        EventInvitation::where('email', $user->email)
+            ->where('expires_at', '>', now())
+            ->each(function (EventInvitation $invitation) use ($user) {
+                $invitation->event->collaborators()->syncWithoutDetaching([
+                    $user->id => ['role' => $invitation->role],
+                ]);
+                $invitation->delete();
+            });
 
         return redirect(route('dashboard', absolute: false));
     }

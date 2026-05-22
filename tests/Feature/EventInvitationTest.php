@@ -70,4 +70,46 @@ class EventInvitationTest extends TestCase
         ]);
         $this->assertDatabaseMissing('event_invitations', ['id' => $invitation->id]);
     }
+
+    public function test_pending_invitations_are_accepted_when_user_registers(): void
+    {
+        $owner = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $owner->id]);
+        EventInvitation::factory()->create([
+            'event_id' => $event->id,
+            'email' => 'invited@example.com',
+            'role' => 'editor',
+            'expires_at' => now()->addDays(7),
+        ]);
+
+        $this->post('/register', [
+            'name' => 'New User',
+            'email' => 'invited@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ]);
+
+        $newUser = User::where('email', 'invited@example.com')->first();
+        $this->assertDatabaseHas('event_collaborators', [
+            'event_id' => $event->id,
+            'user_id' => $newUser->id,
+            'role' => 'editor',
+        ]);
+        $this->assertDatabaseMissing('event_invitations', ['email' => 'invited@example.com']);
+    }
+
+    public function test_register_page_prefills_email_from_invitation_token(): void
+    {
+        $invitation = EventInvitation::factory()->create([
+            'email' => 'invited@example.com',
+            'expires_at' => now()->addDays(7),
+        ]);
+
+        $response = $this->get("/register?invitation={$invitation->token}");
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Auth/Register')
+            ->where('invitationEmail', 'invited@example.com')
+        );
+    }
 }

@@ -6,9 +6,16 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
+const props = defineProps({
+    invitationEmail: {
+        type: String,
+        default: null,
+    },
+})
+
 const form = useForm({
     name: '',
-    email: '',
+    email: props.invitationEmail ?? '',
     password: '',
     password_confirmation: '',
 });
