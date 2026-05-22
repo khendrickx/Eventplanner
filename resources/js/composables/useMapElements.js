@@ -5,7 +5,6 @@ import axios from 'axios'
 export function useMapElements(eventId, planIdRef) {
     const elements = ref([])
     const saving = ref(false)
-    const error = ref(null)
 
     async function load() {
         const { data } = await axios.get(`/api/plans/${toValue(planIdRef)}/elements`)
@@ -48,5 +47,5 @@ export function useMapElements(eventId, planIdRef) {
         }
     }
 
-    return { elements, saving, error, load, create, update, remove }
+    return { elements, saving, load, create, update, remove }
 }

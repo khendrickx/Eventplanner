@@ -1,17 +1,11 @@
 <script setup>
-import { ref } from 'vue'
 import { elementTypesByDrawType } from '@/config/elementTypes.js'
 
-const emit = defineEmits(['draw', 'cancel'])
+const emit = defineEmits(['draw'])
 
-const activeMode = ref(null)
-const showMarkerPicker = ref(false)
-const showZonePicker = ref(false)
-
-function activate(mode, subtype = null) {
-    activeMode.value = mode
-    showMarkerPicker.value = false
-    showZonePicker.value = false
+function activate(event, mode) {
+    const subtype = event.target.value
+    event.target.value = ''
     emit('draw', { mode, subtype })
 }
 </script>
@@ -22,7 +16,7 @@ function activate(mode, subtype = null) {
         <div class="relative">
             <select
                 class="border rounded px-2 py-1.5 text-xs"
-                @change="activate('route', $event.target.value)"
+                @change="activate($event, 'route')"
             >
                 <option value="" disabled selected>Route…</option>
                 <option
@@ -37,7 +31,7 @@ function activate(mode, subtype = null) {
         <div class="relative">
             <select
                 class="border rounded px-2 py-1.5 text-xs"
-                @change="activate('marker', $event.target.value)"
+                @change="activate($event, 'marker')"
             >
                 <option value="" disabled selected>Marker…</option>
                 <option
@@ -52,7 +46,7 @@ function activate(mode, subtype = null) {
         <div class="relative">
             <select
                 class="border rounded px-2 py-1.5 text-xs"
-                @change="activate('zone', $event.target.value)"
+                @change="activate($event, 'zone')"
             >
                 <option value="" disabled selected>Zone…</option>
                 <option
@@ -67,7 +61,7 @@ function activate(mode, subtype = null) {
         <div class="relative">
             <select
                 class="border rounded px-2 py-1.5 text-xs"
-                @change="activate('infrastructure', $event.target.value)"
+                @change="activate($event, 'infrastructure')"
             >
                 <option value="" disabled selected>Infrastructure…</option>
                 <option

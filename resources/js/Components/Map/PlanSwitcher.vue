@@ -23,9 +23,10 @@ async function createPlan() {
 }
 
 async function renamePlan(plan) {
+    if (renamingId.value !== plan.id) return
     if (!renameValue.value.trim()) { renamingId.value = null; return }
+    renamingId.value = null  // clear before await so blur doesn't double-fire
     const { data } = await axios.patch(`/api/plans/${plan.id}`, { name: renameValue.value })
-    renamingId.value = null
     emit('renamed', data)
 }
 

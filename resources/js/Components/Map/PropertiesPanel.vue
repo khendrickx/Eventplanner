@@ -92,7 +92,7 @@ const infraProperties = computed(() => {
             <select
                 :value="local.event_plan_id ?? ''"
                 :disabled="!canEdit"
-                @change="save('event_plan_id', $event.target.value || null)"
+                @change="save('event_plan_id', $event.target.value ? Number($event.target.value) : null)"
                 class="w-full border rounded px-2 py-1.5 text-sm disabled:bg-gray-50"
             >
                 <option value="">All plans (shared)</option>
@@ -110,7 +110,7 @@ const infraProperties = computed(() => {
                     :value="local.properties?.[prop.key] || ''"
                     :disabled="!canEdit"
                     type="number"
-                    @blur="saveProperty(prop.key, parseFloat($event.target.value))"
+                    @blur="saveProperty(prop.key, $event.target.value !== '' ? parseFloat($event.target.value) : null)"
                     class="w-full border rounded px-2 py-1.5 text-sm disabled:bg-gray-50"
                 />
             </div>
