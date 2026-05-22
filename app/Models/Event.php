@@ -36,6 +36,22 @@ class Event extends Model
         return $this->hasMany(EventPlan::class)->orderBy('sort_order');
     }
 
+    public function elements(): HasMany
+    {
+        return $this->hasMany(MapElement::class);
+    }
+
+    public function elementsForPlan(int $planId): \Illuminate\Database\Eloquent\Collection
+    {
+        return $this->elements()
+            ->where(fn ($q) => $q
+                ->where('event_plan_id', $planId)
+                ->orWhereNull('event_plan_id')
+            )
+            ->orderBy('sort_order')
+            ->get();
+    }
+
     public function isOwnedBy(User $user): bool
     {
         return $this->user_id === $user->id;
