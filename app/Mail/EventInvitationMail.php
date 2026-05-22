@@ -3,19 +3,29 @@
 namespace App\Mail;
 
 use App\Models\EventInvitation;
+use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Content;
+use Illuminate\Mail\Mailables\Envelope;
+use Illuminate\Queue\SerializesModels;
 
 class EventInvitationMail extends Mailable
 {
+    use Queueable, SerializesModels;
+
     public function __construct(public EventInvitation $invitation) {}
 
-    public function content(): \Illuminate\Mail\Mailables\Content
+    public function envelope(): Envelope
     {
-        return new \Illuminate\Mail\Mailables\Content(view: 'emails.event-invitation');
+        return new Envelope(
+            subject: "You've been invited to collaborate on {$this->invitation->event->name}",
+        );
     }
 
-    public function envelope(): \Illuminate\Mail\Mailables\Envelope
+    public function content(): Content
     {
-        return new \Illuminate\Mail\Mailables\Envelope(subject: 'Invitation');
+        return new Content(
+            view: 'emails.event-invitation',
+        );
     }
 }
