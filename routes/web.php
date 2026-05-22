@@ -3,6 +3,7 @@
 use App\Http\Controllers\EventCollaboratorController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [EventController::class, 'index'])->middleware('auth')->name('dashboard');
@@ -16,6 +17,10 @@ Route::middleware('auth')->group(function () {
         ->name('events.collaborators.update');
     Route::delete('events/{event}/collaborators/{user}', [EventCollaboratorController::class, 'destroy'])
         ->name('events.collaborators.destroy');
+
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
 Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
