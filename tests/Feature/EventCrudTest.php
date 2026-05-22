@@ -127,4 +127,32 @@ class EventCrudTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    public function test_any_user_with_access_can_duplicate_event(): void
+    {
+        $owner = User::factory()->create();
+        $viewer = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $owner->id, 'name' => 'Race 2026']);
+        $event->collaborators()->attach($viewer->id, ['role' => 'viewer']);
+
+        $response = $this->actingAs($viewer)->post("/events/{$event->id}/duplicate");
+
+        $response->assertRedirect();
+        $this->assertDatabaseCount('events', 2);
+        $newEvent = Event::where('user_id', $viewer->id)->first();
+        $this->assertNotNull($newEvent);
+        $this->assertSame('Race 2026 (copy)', $newEvent->name);
+        $this->assertCount(0, $newEvent->collaborators);
+    }
+
+    public function test_stranger_cannot_duplicate_event(): void
+    {
+        $owner = User::factory()->create();
+        $stranger = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $owner->id]);
+
+        $response = $this->actingAs($stranger)->post("/events/{$event->id}/duplicate");
+
+        $response->assertForbidden();
+    }
 }

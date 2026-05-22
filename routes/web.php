@@ -7,6 +7,7 @@ Route::get('/', [EventController::class, 'index'])->middleware('auth')->name('da
 
 Route::middleware('auth')->group(function () {
     Route::resource('events', EventController::class)->except('index');
+    Route::post('events/{event}/duplicate', [EventController::class, 'duplicate'])->name('events.duplicate');
 });
 
 require __DIR__.'/auth.php';

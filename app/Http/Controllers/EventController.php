@@ -92,4 +92,16 @@ class EventController extends Controller
         $event->delete();
         return redirect()->route('dashboard');
     }
+
+    public function duplicate(Event $event): RedirectResponse
+    {
+        $this->authorize('duplicate', $event);
+
+        $copy = $event->replicate(['user_id']);
+        $copy->user_id = auth()->id();
+        $copy->name = $event->name . ' (copy)';
+        $copy->save();
+
+        return redirect()->route('events.show', $copy);
+    }
 }
