@@ -87,11 +87,23 @@ Adding a new map layer = one object added to each config file. The `LayerSwitche
 | user_id | bigint FK | |
 | role | enum | `editor`, `viewer` |
 
+### `event_plans`
+| Column | Type | Notes |
+|---|---|---|
+| id | bigint PK | |
+| event_id | bigint FK | cascades on delete |
+| name | string | e.g. "Plan A", "Alternative Route" |
+| sort_order | integer | display order; set to `max + 1` on creation |
+| created_at / updated_at | timestamps | |
+
+Each event always has at least one plan. A default plan named "Plan 1" is created automatically when an event is created. Event duplication copies all plans and their elements.
+
 ### `map_elements`
 | Column | Type | Notes |
 |---|---|---|
 | id | bigint PK | |
-| event_id | bigint FK | |
+| event_id | bigint FK | always set; used to scope shared elements |
+| event_plan_id | bigint FK nullable | null = shown in all plans of this event |
 | type | enum | `route`, `marker`, `zone`, `infrastructure` |
 | subtype | string | validated against element type registry |
 | name | string nullable | user-supplied label |
@@ -103,11 +115,16 @@ Adding a new map layer = one object added to each config file. The `LayerSwitche
 | sort_order | integer | render stacking order; set to `max + 1` on creation, reorderable via drag in the element sidebar |
 | created_at / updated_at | timestamps | |
 
+**Default behaviour:** When an element is created, `event_plan_id` defaults to `NULL` (shared across all plans). The user can assign it to a specific plan via a "Plan" dropdown in the properties panel.
+
+When loading elements for a plan, the query returns: elements where `event_plan_id = {plan_id}` OR (`event_id = {event_id}` AND `event_plan_id IS NULL`).
+
 ### `map_overlays`
 | Column | Type | Notes |
 |---|---|---|
 | id | bigint PK | |
-| event_id | bigint FK | |
+| event_id | bigint FK | always set |
+| event_plan_id | bigint FK nullable | null = shown in all plans |
 | name | string | |
 | image_path | string | path to stored file (Laravel storage) |
 | bounds | json | `[[sw_lng, sw_lat], [ne_lng, ne_lat]]` — corner coordinates for placement |
@@ -143,7 +160,7 @@ Adding a new map layer = one object added to each config file. The `LayerSwitche
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Toolbar: layer switcher │ draw tools │ undo │ rotate    │
+│ Toolbar: plan switcher │ layer switcher │ draw tools │ undo │ rotate │
 ├──────────────────┬──────────────────────────┬───────────┤
 │                  │                          │ Properties│
 │  Element sidebar │     MapLibre canvas      │ panel     │
@@ -319,26 +336,35 @@ Invitations expire after **7 days**. Visiting an expired token shows an informat
 If an already-authenticated user visits `/register?invitation={token}`, they are redirected to the dashboard and the invitation is accepted immediately without re-registering.
 
 ### Event Duplication
-Available to all users with access (owner, editor, or viewer). Creates a new event owned by the duplicating user with all `map_elements` and `map_overlays` copied (overlay image files are duplicated in storage). Collaborators are not copied. Accessible from the dashboard and `Events/Edit`.
+Available to all users with access (owner, editor, or viewer). Creates a new event owned by the duplicating user with all `event_plans`, `map_elements`, and `map_overlays` copied (overlay image files are duplicated in storage). Collaborators are not copied. Accessible from the dashboard and `Events/Edit`.
 
 ---
 
 ## 9. API Routes
 
 ```
+# Plans
+GET    /api/events/{id}/plans          — list plans for event
+POST   /api/events/{id}/plans          — create plan (editor/owner)
+PATCH  /api/plans/{id}                 — rename plan (editor/owner)
+POST   /api/plans/{id}/duplicate       — duplicate plan + elements (editor/owner)
+DELETE /api/plans/{id}                 — delete plan (editor/owner; event must retain ≥1 plan)
+
 # Elements
-GET    /api/events/{id}/elements       — list all elements
-POST   /api/events/{id}/elements       — create element (editor/owner)
+GET    /api/plans/{id}/elements        — list elements for plan (includes shared elements)
+POST   /api/plans/{id}/elements        — create element scoped to plan (editor/owner)
+POST   /api/events/{id}/elements       — create shared element (no plan; editor/owner)
 PATCH  /api/elements/{id}              — update element (editor/owner)
 DELETE /api/elements/{id}              — delete element (editor/owner)
 
 # Overlays
-POST   /api/events/{id}/overlays       — upload image overlay (editor/owner)
+POST   /api/plans/{id}/overlays        — upload overlay scoped to plan (editor/owner)
+POST   /api/events/{id}/overlays       — upload shared overlay (editor/owner)
 PATCH  /api/overlays/{id}              — update bounds/opacity (editor/owner)
 DELETE /api/overlays/{id}              — delete overlay (editor/owner)
 
 # Export
-GET    /api/events/{id}/export/csv     — download CSV (any access)
+GET    /api/plans/{id}/export/csv      — download CSV for a plan (any access)
 ```
 
 PNG export is client-side only — no API route needed.
