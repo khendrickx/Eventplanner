@@ -55,6 +55,11 @@ class EventController extends Controller
                 'name' => $event->name,
                 'role' => $event->roleFor(auth()->user()),
             ],
+            'plans' => $event->plans->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'sort_order' => $p->sort_order,
+            ]),
         ]);
     }
 
