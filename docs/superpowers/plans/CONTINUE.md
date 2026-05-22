@@ -21,7 +21,23 @@ What exists:
 - Sanctum already in `composer.json` (no install needed)
 - `routes/api.php` does NOT exist yet — Plan 2 creates it
 
-**Plan 2 — Map Editor: ⬜ TODO**  
+**Plan 2 — Map Editor: ✅ COMPLETE**
+
+All 63 tests pass. Git HEAD: `9fd869b`
+
+What was added:
+- `map_elements` table + `MapElement` model
+- `EventPlan` API (create, rename, duplicate, delete) — `routes/api.php` with session auth
+- `MapElement` API (index per plan, create plan-scoped/shared, update, delete)
+- Element type registry: `config/map_elements.php` + `resources/js/config/elementTypes.js`
+- Layer registry: `resources/js/config/mapLayers.js` (OSM vector + Vlaanderen satellite WMTS)
+- Composables: `useUndoStack.js`, `useMapElements.js`
+- Vue components: `MapEditor.vue`, `LayerSwitcher.vue`, `DrawToolbar.vue`, `PlanSwitcher.vue`, `ElementSidebar.vue`, `PropertiesPanel.vue`
+- Custom draw mode: `DrawRectangleMode.js` (two-click rectangle for infrastructure)
+- Full map editor wired in `Events/Show.vue` + `EventController::show()` updated to pass plans
+- `routes/api.php` uses `auth` middleware (session-based, NOT `auth:sanctum`)
+- `EventPolicy` has separate `update()` (owner-only) and `editContent()` (owner+editor) methods
+
 **Plan 3 — Export & Overlays: ⬜ TODO**
 
 ---
