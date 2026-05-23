@@ -165,4 +165,63 @@ class MapElementApiTest extends TestCase
 
         $response->assertUnprocessable();
     }
+
+    public function test_can_create_group_element(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        $response = $this->actingAs($user)->postJson("/api/plans/{$plan->id}/elements", [
+            'type' => 'group',
+            'geometry' => ['type' => 'Polygon', 'coordinates' => [[[4.3, 50.8],[4.4, 50.8],[4.4, 50.9],[4.3, 50.9],[4.3, 50.8]]]],
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('map_elements', ['type' => 'group', 'event_id' => $event->id]);
+    }
+
+    public function test_can_create_child_element_with_parent_id(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+        $group = MapElement::factory()->create([
+            'event_id' => $event->id,
+            'event_plan_id' => $plan->id,
+            'type' => 'group',
+            'subtype' => null,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/plans/{$plan->id}/elements", [
+            'type' => 'marker',
+            'subtype' => 'start',
+            'geometry' => $this->makeGeometry(),
+            'parent_id' => $group->id,
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('map_elements', ['parent_id' => $group->id]);
+    }
+
+    public function test_group_cannot_have_parent_id(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+        $group = MapElement::factory()->create([
+            'event_id' => $event->id,
+            'event_plan_id' => $plan->id,
+            'type' => 'group',
+            'subtype' => null,
+        ]);
+
+        $response = $this->actingAs($user)->postJson("/api/plans/{$plan->id}/elements", [
+            'type' => 'group',
+            'geometry' => ['type' => 'Polygon', 'coordinates' => [[[4.3, 50.8],[4.4, 50.8],[4.4, 50.9],[4.3, 50.9],[4.3, 50.8]]]],
+            'parent_id' => $group->id,
+        ]);
+
+        $response->assertUnprocessable();
+    }
 }
