@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\EventExportController;
 use App\Http\Controllers\Api\EventPlanController;
 use App\Http\Controllers\Api\MapElementController;
 use App\Http\Controllers\Api\MapOverlayController;
@@ -17,6 +18,8 @@ Route::middleware('auth')->group(function () {
     Route::post('events/{event}/elements', [MapElementController::class, 'storeShared']);
     Route::patch('elements/{element}', [MapElementController::class, 'update']);
     Route::delete('elements/{element}', [MapElementController::class, 'destroy']);
+
+    Route::get('plans/{plan}/export/csv', [EventExportController::class, 'csv']);
 
     Route::get('plans/{plan}/overlays', [MapOverlayController::class, 'indexForPlan']);
     Route::post('plans/{plan}/overlays', [MapOverlayController::class, 'storeForPlan']);
