@@ -14,6 +14,9 @@ import DrawToolbar from './DrawToolbar.vue'
 import PlanSwitcher from './PlanSwitcher.vue'
 import ElementSidebar from './ElementSidebar.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
+import OverlayManager from './OverlayManager.vue'
+import axios from 'axios'
+import { useMapExport } from '@/composables/useMapExport.js'
 
 const props = defineProps({
     event: { type: Object, required: true },
@@ -29,6 +32,9 @@ const activePlanId = ref(props.initialPlans[0]?.id)
 const activeLayerId = ref(mapLayers[0].id)
 const selectedElementId = ref(null)
 const canEdit = props.event.role !== 'viewer'
+
+const overlays = ref([])
+const { exportPng } = useMapExport(() => map)
 
 const { push: pushUndo, undo, canUndo } = useUndoStack()
 const { elements, saving, load, create, update, remove } = useMapElements(props.event.id, activePlanId)
@@ -67,8 +73,9 @@ onMounted(async () => {
     }
 
     map.on('load', async () => {
-        await load()
+        await Promise.all([load(), loadOverlays()])
         renderElements()
+        renderOverlays()
     })
 })
 
@@ -96,7 +103,7 @@ async function switchLayer(layerId) {
     const layer = mapLayers.find(l => l.id === layerId)
     const style = layer.type === 'vector-style' ? layer.url : buildRasterStyle(layer)
     map.setStyle(style)
-    map.once('styledata', () => renderElements())
+    map.once('styledata', () => { renderElements(); renderOverlays() })
 }
 
 // ── Plan switching ───────────────────────────────────────────────────────────
@@ -104,8 +111,51 @@ async function switchLayer(layerId) {
 async function switchPlan(planId) {
     activePlanId.value = planId
     selectedElementId.value = null
-    await load()
+    await Promise.all([load(), loadOverlays()])
     renderElements()
+    renderOverlays()
+}
+
+// ── Overlays ─────────────────────────────────────────────────────────────────
+
+async function loadOverlays() {
+    const { data } = await axios.get(`/api/plans/${activePlanId.value}/overlays`)
+    overlays.value = data.data
+}
+
+function renderOverlays() {
+    if (!map || !map.isStyleLoaded()) return
+    overlays.value.forEach(overlay => {
+        const sourceId = `overlay-${overlay.id}`
+        const layerId = `overlay-layer-${overlay.id}`
+        const imageUrl = `/storage/${overlay.image_path}`
+        const coords = [
+            [overlay.bounds[0][0], overlay.bounds[1][1]], // NW
+            [overlay.bounds[1][0], overlay.bounds[1][1]], // NE
+            [overlay.bounds[1][0], overlay.bounds[0][1]], // SE
+            [overlay.bounds[0][0], overlay.bounds[0][1]], // SW
+        ]
+        if (!map.getSource(sourceId)) {
+            map.addSource(sourceId, { type: 'image', url: imageUrl, coordinates: coords })
+            map.addLayer({ id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': overlay.opacity } })
+        } else {
+            map.setPaintProperty(layerId, 'raster-opacity', overlay.opacity)
+        }
+    })
+}
+
+function handleOverlayAdded(overlay) {
+    overlays.value.push(overlay)
+    renderOverlays()
+}
+
+function handleOverlayUpdated(overlay) {
+    const i = overlays.value.findIndex(x => x.id === overlay.id)
+    if (i !== -1) { overlays.value[i] = overlay; renderOverlays() }
+}
+
+function handleOverlayDeleted(id) {
+    overlays.value = overlays.value.filter(o => o.id !== id)
 }
 
 // ── Plan event handlers ──────────────────────────────────────────────────────
@@ -359,6 +409,12 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 class="text-xs border rounded px-2 py-1.5 disabled:opacity-40 hover:bg-gray-50"
                 title="Undo (Ctrl+Z)"
             >&#x21A9; Undo</button>
+            <div class="w-px h-5 bg-gray-200 shrink-0"></div>
+            <div class="flex gap-1 shrink-0">
+                <button @click="exportPng()" class="text-xs border rounded px-2 py-1.5 hover:bg-gray-50">Export PNG</button>
+                <button @click="exportPng({ print: true })" class="text-xs border rounded px-2 py-1.5 hover:bg-gray-50">Print PNG</button>
+                <a :href="`/api/plans/${activePlanId}/export/csv`" class="text-xs border rounded px-2 py-1.5 hover:bg-gray-50" download>Export CSV</a>
+            </div>
             <button
                 class="text-xs border rounded px-2 py-1.5 hover:bg-gray-50 ml-auto shrink-0"
                 title="Reset to north"
@@ -378,6 +434,17 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 @toggle-hide="handleToggleHide"
             />
             <div ref="mapContainer" class="flex-1" />
+            <div class="w-56 border-r bg-white overflow-y-auto shrink-0">
+                <OverlayManager
+                    :event-id="event.id"
+                    :plan-id="activePlanId"
+                    :overlays="overlays"
+                    :can-edit="canEdit"
+                    @added="handleOverlayAdded"
+                    @updated="handleOverlayUpdated"
+                    @deleted="handleOverlayDeleted"
+                />
+            </div>
             <PropertiesPanel
                 :element="selectedElement()"
                 :plans="plans"
