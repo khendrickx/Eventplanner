@@ -4,7 +4,7 @@
 
 ---
 
-## Current state (as of 2026-05-22)
+## Current state (as of 2026-05-23)
 
 **Plan 1 — Auth & Events: ✅ COMPLETE**
 
@@ -52,6 +52,26 @@ What was added:
 - MapEditor toolbar: Export PNG, Print PNG, Export CSV buttons
 - Overlay rendering: MapLibre `ImageSource` layers per overlay, removed on delete
 - Event duplication now copies: plans → elements (plan-scoped + shared) → overlays (with file copy via `Storage::disk('public')->copy()`)
+
+**Plan 4 — Groups (Hierarchical Elements): ✅ COMPLETE**
+
+All 80 tests pass. Git HEAD: `e2c3fa5`
+
+What was added:
+- `parent_id` nullable FK (self-referencing) on `map_elements`; `type` column widened from enum to varchar(50) to accept `'group'`
+- `properties` nullable JSON column on `event_plans`
+- `group` element type added to PHP registry (`config/map_elements.php`) and JS registry (`elementTypes.js`)
+- `MapElement` model: `parent_id` in `$fillable`, `parent()`/`children()` relations, `copyCollection()` static two-pass helper
+- `EventPlan` model: `properties` in `$fillable` + cast as array
+- `StoreMapElementRequest` / `UpdateMapElementRequest`: `parent_id` validation with group-nesting guard (groups cannot have a parent) and event-scoped `exists` check
+- `EventPlanController::update()` accepts `properties`; `duplicate()` uses `MapElement::copyCollection()`
+- `EventController::duplicate()` refactored to use `MapElement::copyCollection()` for both plan-scoped and shared elements
+- `DrawToolbar.vue`: Group draw button emitting `{ mode: 'group', subtype: null }`
+- `MapEditor.vue`: `expandedGroupIds` (ref([])), `activePlan` computed, `toggleGroupExpansion()`, `renderElements()` hides children of collapsed groups, `onDrawCreate` auto-assigns `parent_id` when a group is selected, split right panel (`PropertiesPanel` vs `PlanPropertiesPanel`)
+- `ElementSidebar.vue`: Groups section with collapsible children (indented with `border-l-2 border-indigo-200`); ungrouped elements in type buckets below
+- `EquipmentList.vue`: reusable add/edit/remove component using `crypto.randomUUID()` for IDs
+- `PropertiesPanel.vue`: element-only panel; Level field (shown when `parent_id != null`); EquipmentList for element equipment; subtype hidden for groups
+- `PlanPropertiesPanel.vue`: plan name + EquipmentList for plan-level equipment; shown when no element is selected
 - `php artisan storage:link` already run (symlink exists at `public/storage`)
 
 ---
