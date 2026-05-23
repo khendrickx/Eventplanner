@@ -1,6 +1,9 @@
 // resources/js/config/elementTypes.js
 
 export const elementTypes = [
+    // Groups
+    { id: 'group',           type: 'group',          label: 'Group',            defaultStyle: { color: '#6366f1', opacity: 0.12 } },
+
     // Routes
     { id: 'course',           type: 'route',          label: 'Course',           defaultStyle: { color: '#e74c3c', width: 4 } },
     { id: 'pedestrian_route', type: 'route',          label: 'Pedestrian Route', defaultStyle: { color: '#3498db', width: 2 } },
@@ -47,8 +50,9 @@ export const elementTypes = [
 export const elementTypesBySubtype = Object.fromEntries(elementTypes.map(t => [t.id, t]))
 
 export const elementTypesByDrawType = {
-    route: elementTypes.filter(t => t.type === 'route'),
-    marker: elementTypes.filter(t => t.type === 'marker'),
-    zone: elementTypes.filter(t => t.type === 'zone'),
+    group:          elementTypes.filter(t => t.type === 'group'),
+    route:          elementTypes.filter(t => t.type === 'route'),
+    marker:         elementTypes.filter(t => t.type === 'marker'),
+    zone:           elementTypes.filter(t => t.type === 'zone'),
     infrastructure: elementTypes.filter(t => t.type === 'infrastructure'),
 }
