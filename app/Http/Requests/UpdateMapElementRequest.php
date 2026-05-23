@@ -26,7 +26,8 @@ class UpdateMapElementRequest extends FormRequest
             'sort_order'              => ['sometimes', 'integer'],
             'event_plan_id'           => ['sometimes', 'nullable', 'integer', 'exists:event_plans,id'],
             'parent_id'               => [
-                'sometimes', 'nullable', 'integer', 'exists:map_elements,id',
+                'sometimes', 'nullable', 'integer',
+                Rule::exists('map_elements', 'id')->where('event_id', $this->route('element')?->event_id),
                 function ($attribute, $value, $fail) {
                     if ($value !== null) {
                         $element = $this->route('element');
