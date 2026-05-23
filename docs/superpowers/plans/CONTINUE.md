@@ -38,7 +38,21 @@ What was added:
 - `routes/api.php` uses `auth` middleware (session-based, NOT `auth:sanctum`)
 - `EventPolicy` has separate `update()` (owner-only) and `editContent()` (owner+editor) methods
 
-**Plan 3 — Export & Overlays: ⬜ TODO**
+**Plan 3 — Export & Overlays: ✅ COMPLETE**
+
+All 74 tests pass. Git HEAD: `803b7f9`
+
+What was added:
+- `map_overlays` table + `MapOverlay` model + factory
+- `Event::overlaysForPlan()` — same shared/plan-scoped pattern as elements
+- Overlay API: upload (plan-scoped or shared), list per plan (with `image_url`), update bounds/opacity, delete (removes file from storage)
+- CSV export: `GET /api/plans/{plan}/export/csv` — streams RFC 4180 CSV via `fputcsv`, includes shared elements
+- `OverlayManager.vue` — upload, opacity slider, delete; integrated into MapEditor sidebar
+- `useMapExport.js` — PNG export with temporary `devicePixelRatio` override for print quality
+- MapEditor toolbar: Export PNG, Print PNG, Export CSV buttons
+- Overlay rendering: MapLibre `ImageSource` layers per overlay, removed on delete
+- Event duplication now copies: plans → elements (plan-scoped + shared) → overlays (with file copy via `Storage::disk('public')->copy()`)
+- `php artisan storage:link` already run (symlink exists at `public/storage`)
 
 ---
 
