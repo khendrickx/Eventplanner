@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import maplibregl from 'maplibre-gl'
 import MapboxDraw from '@mapbox/mapbox-gl-draw'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -14,6 +14,7 @@ import DrawToolbar from './DrawToolbar.vue'
 import PlanSwitcher from './PlanSwitcher.vue'
 import ElementSidebar from './ElementSidebar.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
+import PlanPropertiesPanel from './PlanPropertiesPanel.vue'
 import OverlayManager from './OverlayManager.vue'
 import axios from 'axios'
 import { useMapExport } from '@/composables/useMapExport.js'
@@ -34,6 +35,18 @@ const selectedElementId = ref(null)
 const canEdit = props.event.role !== 'viewer'
 
 const overlays = ref([])
+const expandedGroupIds = ref([])
+const activePlan = computed(() => plans.value.find(p => p.id === activePlanId.value) || null)
+
+function toggleGroupExpansion(groupId) {
+    if (expandedGroupIds.value.includes(groupId)) {
+        expandedGroupIds.value = expandedGroupIds.value.filter(id => id !== groupId)
+    } else {
+        expandedGroupIds.value = [...expandedGroupIds.value, groupId]
+    }
+    renderElements()
+}
+
 const { exportPng } = useMapExport(() => map)
 
 const { push: pushUndo, undo, canUndo } = useUndoStack()
@@ -202,20 +215,29 @@ function startDraw({ mode, subtype }) {
 }
 
 async function onDrawCreate(e) {
-    const feature = e.features[0]
-    const typeDef = pendingSubtype ? elementTypesBySubtype[pendingSubtype] : null
+    const feature    = e.features[0]
+    const subtypeKey = pendingSubtype || (pendingType === 'group' ? 'group' : null)
+    const typeDef    = subtypeKey ? elementTypesBySubtype[subtypeKey] : null
     const defaultStyle = typeDef?.defaultStyle || {}
 
+    const activeEl = selectedElement()
+    const parentId = (activeEl?.type === 'group') ? activeEl.id : null
+
     const newEl = await create({
-        type: pendingType || featureType(feature),
-        subtype: pendingSubtype,
-        geometry: feature.geometry,
+        type:       pendingType || featureType(feature),
+        subtype:    pendingSubtype || null,
+        geometry:   feature.geometry,
         properties: { styling: defaultStyle },
+        parent_id:  parentId,
     })
 
     draw.delete(feature.id)
     renderElements()
     selectedElementId.value = newEl.id
+
+    if (parentId && !expandedGroupIds.value.includes(parentId)) {
+        toggleGroupExpansion(parentId)
+    }
 
     pushUndo(async () => {
         await remove(newEl.id)
@@ -275,7 +297,11 @@ function renderElements() {
     if (!map || !map.isStyleLoaded()) return
 
     const sourceId = 'elements'
-    const visibleEls = elements.value.filter(el => !el.is_hidden)
+    const visibleEls = elements.value.filter(el => {
+        if (el.is_hidden) return false
+        if (el.parent_id != null) return expandedGroupIds.value.includes(el.parent_id)
+        return true
+    })
 
     const geojson = {
         type: 'FeatureCollection',
@@ -360,6 +386,12 @@ async function handleUpdate(payload) {
     })
 }
 
+async function handlePlanUpdate(properties) {
+    const { data } = await axios.patch(`/api/plans/${activePlanId.value}`, { properties })
+    const i = plans.value.findIndex(p => p.id === activePlanId.value)
+    if (i !== -1) plans.value[i] = data
+}
+
 async function handleToggleLock(el) {
     await handleUpdate({ id: el.id, is_locked: !el.is_locked })
 }
@@ -435,9 +467,11 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 :elements="elements"
                 :selected-id="selectedElementId"
                 :can-edit="canEdit"
+                :expanded-group-ids="expandedGroupIds"
                 @select="id => selectedElementId = id"
                 @toggle-lock="handleToggleLock"
                 @toggle-hide="handleToggleHide"
+                @toggle-group="toggleGroupExpansion"
             />
             <div ref="mapContainer" class="flex-1" />
             <div class="w-56 border-r bg-white overflow-y-auto shrink-0">
@@ -452,10 +486,17 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 />
             </div>
             <PropertiesPanel
+                v-if="selectedElement()"
                 :element="selectedElement()"
                 :plans="plans"
                 :can-edit="canEdit"
                 @update="handleUpdate"
+            />
+            <PlanPropertiesPanel
+                v-else-if="activePlan"
+                :plan="activePlan"
+                :can-edit="canEdit"
+                @update="handlePlanUpdate"
             />
         </div>
     </div>
