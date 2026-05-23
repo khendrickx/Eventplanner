@@ -155,6 +155,12 @@ function handleOverlayUpdated(overlay) {
 }
 
 function handleOverlayDeleted(id) {
+    if (map) {
+        const layerId = `overlay-layer-${id}`
+        const sourceId = `overlay-${id}`
+        if (map.getLayer(layerId)) map.removeLayer(layerId)
+        if (map.getSource(sourceId)) map.removeSource(sourceId)
+    }
     overlays.value = overlays.value.filter(o => o.id !== id)
 }
 

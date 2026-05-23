@@ -11,7 +11,18 @@ export function useMapExport(getMap) {
             configurable: true,
         })
 
+        function restoreDpr() {
+            Object.defineProperty(window, 'devicePixelRatio', {
+                get: () => originalDpr,
+                configurable: true,
+            })
+        }
+
+        // Fallback: restore dpr after 3s if render event never fires
+        const timeout = setTimeout(restoreDpr, 3000)
+
         map.once('render', () => {
+            clearTimeout(timeout)
             const canvas = map.getCanvas()
             const url = canvas.toDataURL('image/png')
 
@@ -20,10 +31,7 @@ export function useMapExport(getMap) {
             a.download = print ? 'map-print.png' : 'map-digital.png'
             a.click()
 
-            Object.defineProperty(window, 'devicePixelRatio', {
-                get: () => originalDpr,
-                configurable: true,
-            })
+            restoreDpr()
         })
 
         map.triggerRepaint()

@@ -67,7 +67,7 @@ async function deleteOverlay(overlay) {
                 <input
                     type="range" min="0" max="1" step="0.05"
                     :value="overlay.opacity"
-                    @change="updateOpacity(overlay, parseFloat($event.target.value))"
+                    @input="updateOpacity(overlay, parseFloat($event.target.value))"
                     class="w-full"
                 />
                 <span class="text-xs w-8 text-right">{{ Math.round(overlay.opacity * 100) }}%</span>
