@@ -93,4 +93,23 @@ class EventPlanApiTest extends TestCase
         $this->assertDatabaseCount('event_plans', 2);
         $this->assertDatabaseHas('event_plans', ['name' => 'Plan A (copy)']);
     }
+
+    public function test_owner_can_update_plan_properties(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        $equipment = [
+            ['id' => 'abc123', 'name' => 'Table', 'quantity' => 4, 'unit' => 'pcs', 'notes' => ''],
+        ];
+
+        $response = $this->actingAs($user)->patchJson("/api/plans/{$plan->id}", [
+            'properties' => ['equipment' => $equipment],
+        ]);
+
+        $response->assertOk();
+        $plan->refresh();
+        $this->assertEquals($equipment, $plan->properties['equipment']);
+    }
 }
