@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEventPlanRequest;
 use App\Models\Event;
 use App\Models\EventPlan;
+use App\Models\MapElement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,10 +22,9 @@ class EventPlanController extends Controller
     {
         $this->authorize('editContent', $event);
 
-        $sortOrder = $event->plans()->max('sort_order') + 1;
         $plan = $event->plans()->create([
-            'name' => $request->name,
-            'sort_order' => $sortOrder,
+            'name'       => $request->name,
+            'sort_order' => $event->plans()->max('sort_order') + 1,
         ]);
 
         return response()->json($plan, 201);
@@ -33,8 +33,13 @@ class EventPlanController extends Controller
     public function update(Request $request, EventPlan $plan): JsonResponse
     {
         $this->authorize('editContent', $plan->event);
-        $request->validate(['name' => ['required', 'string', 'max:255']]);
-        $plan->update(['name' => $request->name]);
+
+        $validated = $request->validate([
+            'name'       => ['sometimes', 'required', 'string', 'max:255'],
+            'properties' => ['sometimes', 'nullable', 'array'],
+        ]);
+
+        $plan->update($validated);
         return response()->json($plan);
     }
 
@@ -42,17 +47,13 @@ class EventPlanController extends Controller
     {
         $this->authorize('editContent', $plan->event);
 
-        $event = $plan->event;
-        $copy = $event->plans()->create([
-            'name' => $plan->name . ' (copy)',
-            'sort_order' => $event->plans()->max('sort_order') + 1,
+        $copy = $plan->event->plans()->create([
+            'name'       => $plan->name . ' (copy)',
+            'sort_order' => $plan->event->plans()->max('sort_order') + 1,
+            'properties' => $plan->properties,
         ]);
 
-        foreach ($plan->elements as $element) {
-            $newElement = $element->replicate(['event_plan_id']);
-            $newElement->event_plan_id = $copy->id;
-            $newElement->save();
-        }
+        MapElement::copyCollection($plan->elements, $plan->event_id, $copy->id);
 
         return response()->json($copy, 201);
     }

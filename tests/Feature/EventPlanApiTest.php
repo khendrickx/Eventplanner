@@ -94,6 +94,37 @@ class EventPlanApiTest extends TestCase
         $this->assertDatabaseHas('event_plans', ['name' => 'Plan A (copy)']);
     }
 
+    public function test_duplicate_plan_preserves_group_hierarchy(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        $group = \App\Models\MapElement::factory()->create([
+            'event_id' => $event->id, 'event_plan_id' => $plan->id,
+            'type' => 'group', 'subtype' => null,
+        ]);
+        \App\Models\MapElement::factory()->create([
+            'event_id' => $event->id, 'event_plan_id' => $plan->id,
+            'parent_id' => $group->id,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->postJson("/api/plans/{$plan->id}/duplicate");
+
+        $response->assertCreated();
+
+        $copyPlanId  = $response->json('id');
+        $copyElements = \App\Models\MapElement::where('event_plan_id', $copyPlanId)->get();
+        $copyGroup   = $copyElements->firstWhere('type', 'group');
+        $copyChild   = $copyElements->whereNotNull('parent_id')->first();
+
+        $this->assertNotNull($copyGroup);
+        $this->assertNotNull($copyChild);
+        $this->assertEquals($copyGroup->id, $copyChild->parent_id);
+        $this->assertNotEquals($group->id, $copyGroup->id);
+    }
+
     public function test_owner_can_update_plan_properties(): void
     {
         $user = User::factory()->create();
