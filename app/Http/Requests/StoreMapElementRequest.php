@@ -38,7 +38,8 @@ class StoreMapElementRequest extends FormRequest
             'sort_order'              => ['integer'],
             'event_plan_id'           => ['nullable', 'integer', 'exists:event_plans,id'],
             'parent_id'               => [
-                'nullable', 'integer', 'exists:map_elements,id',
+                'nullable', 'integer',
+                Rule::exists('map_elements', 'id')->where('event_id', $this->route('plan')?->event_id),
                 function ($attribute, $value, $fail) {
                     if ($value !== null && $this->input('type') === 'group') {
                         $fail('Groups cannot be nested inside other groups.');

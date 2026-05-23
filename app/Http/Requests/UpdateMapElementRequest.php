@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateMapElementRequest extends FormRequest
 {
@@ -24,7 +25,17 @@ class UpdateMapElementRequest extends FormRequest
             'is_hidden'               => ['sometimes', 'boolean'],
             'sort_order'              => ['sometimes', 'integer'],
             'event_plan_id'           => ['sometimes', 'nullable', 'integer', 'exists:event_plans,id'],
-            'parent_id'               => ['sometimes', 'nullable', 'integer', 'exists:map_elements,id'],
+            'parent_id'               => [
+                'sometimes', 'nullable', 'integer', 'exists:map_elements,id',
+                function ($attribute, $value, $fail) {
+                    if ($value !== null) {
+                        $element = $this->route('element');
+                        if ($element && $element->type === 'group') {
+                            $fail('Groups cannot be nested inside other groups.');
+                        }
+                    }
+                },
+            ],
         ];
     }
 }
