@@ -73,4 +73,56 @@ class EventExportTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    public function test_csv_plan_column_distinguishes_shared_from_plan_specific(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        MapElement::factory()->create([
+            'event_id' => $event->id,
+            'event_plan_id' => $plan->id,
+            'name' => 'Plan Element',
+            'geometry' => ['type' => 'Point', 'coordinates' => [4.35, 50.85]],
+        ]);
+        MapElement::factory()->create([
+            'event_id' => $event->id,
+            'event_plan_id' => null,
+            'name' => 'Shared Element',
+            'geometry' => ['type' => 'Point', 'coordinates' => [4.35, 50.85]],
+        ]);
+
+        $content = $this->actingAs($user)->get("/api/plans/{$plan->id}/export/csv")->getContent();
+        $rows = array_filter(array_map('str_getcsv', explode("\n", trim($content))));
+        $rows = array_values($rows);
+
+        // Find plan column index from header
+        $header = $rows[0];
+        $planIdx = array_search('plan', $header);
+
+        $planValues = array_column(array_slice($rows, 1), $planIdx);
+        $this->assertContains('Plan 1', $planValues);
+        $this->assertContains('shared', $planValues);
+    }
+
+    public function test_csv_escapes_special_characters(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        MapElement::factory()->create([
+            'event_id' => $event->id,
+            'event_plan_id' => $plan->id,
+            'name' => 'Start, Line "A"',
+            'notes' => "Line one\nLine two",
+            'geometry' => ['type' => 'Point', 'coordinates' => [4.35, 50.85]],
+        ]);
+
+        $content = $this->actingAs($user)->get("/api/plans/{$plan->id}/export/csv")->getContent();
+        // fputcsv quotes fields with commas/quotes and doubles internal quotes (RFC 4180)
+        $this->assertStringContainsString('"Start, Line ""A"""', $content);
+        $this->assertStringContainsString('Line one', $content);
+    }
 }
