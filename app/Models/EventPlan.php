@@ -22,4 +22,9 @@ class EventPlan extends Model
     {
         return $this->hasMany(MapElement::class, 'event_plan_id');
     }
+
+    public function overlays(): HasMany
+    {
+        return $this->hasMany(MapOverlay::class, 'event_plan_id');
+    }
 }

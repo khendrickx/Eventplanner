@@ -52,6 +52,22 @@ class Event extends Model
             ->get();
     }
 
+    public function overlays(): HasMany
+    {
+        return $this->hasMany(MapOverlay::class);
+    }
+
+    public function overlaysForPlan(int $planId): \Illuminate\Database\Eloquent\Collection
+    {
+        return $this->overlays()
+            ->where(fn ($q) => $q
+                ->where('event_plan_id', $planId)
+                ->orWhereNull('event_plan_id')
+            )
+            ->orderBy('sort_order')
+            ->get();
+    }
+
     public function isOwnedBy(User $user): bool
     {
         return $this->user_id === $user->id;
