@@ -11,7 +11,11 @@ class EventPlan extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'sort_order'];
+    protected $fillable = ['name', 'sort_order', 'properties'];
+
+    protected $casts = [
+        'properties' => 'array',
+    ];
 
     public function event(): BelongsTo
     {

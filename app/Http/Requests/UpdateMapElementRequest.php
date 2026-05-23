@@ -14,16 +14,17 @@ class UpdateMapElementRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'notes' => ['sometimes', 'nullable', 'string'],
-            'geometry' => ['sometimes', 'required', 'array'],
-            'geometry.type' => ['required_with:geometry', 'string'],
-            'geometry.coordinates' => ['required_with:geometry'],
-            'properties' => ['sometimes', 'nullable', 'array'],
-            'is_locked' => ['sometimes', 'boolean'],
-            'is_hidden' => ['sometimes', 'boolean'],
-            'sort_order' => ['sometimes', 'integer'],
-            'event_plan_id' => ['sometimes', 'nullable', 'integer', 'exists:event_plans,id'],
+            'name'                    => ['sometimes', 'nullable', 'string', 'max:255'],
+            'notes'                   => ['sometimes', 'nullable', 'string'],
+            'geometry'                => ['sometimes', 'required', 'array'],
+            'geometry.type'           => ['required_with:geometry', 'string'],
+            'geometry.coordinates'    => ['required_with:geometry'],
+            'properties'              => ['sometimes', 'nullable', 'array'],
+            'is_locked'               => ['sometimes', 'boolean'],
+            'is_hidden'               => ['sometimes', 'boolean'],
+            'sort_order'              => ['sometimes', 'integer'],
+            'event_plan_id'           => ['sometimes', 'nullable', 'integer', 'exists:event_plans,id'],
+            'parent_id'               => ['sometimes', 'nullable', 'integer', 'exists:map_elements,id'],
         ];
     }
 }
