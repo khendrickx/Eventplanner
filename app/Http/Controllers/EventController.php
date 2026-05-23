@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\MapElement;
 use App\Models\User;
 use App\Http\Requests\StoreEventRequest;
 use App\Http\Requests\UpdateEventRequest;
@@ -103,50 +104,42 @@ class EventController extends Controller
     {
         $this->authorize('duplicate', $event);
 
-        $copy = $event->replicate(['user_id']);
-        $copy->user_id = auth()->id();
-        $copy->name = $event->name . ' (copy)';
+        $copy           = $event->replicate(['user_id']);
+        $copy->user_id  = auth()->id();
+        $copy->name     = $event->name . ' (copy)';
         $copy->save();
 
-        // Copy plans, building a map from old plan ID → new plan ID
         $planIdMap = [];
         foreach ($event->plans as $plan) {
             $newPlan = $copy->plans()->create([
-                'name' => $plan->name,
+                'name'       => $plan->name,
                 'sort_order' => $plan->sort_order,
+                'properties' => $plan->properties,
             ]);
             $planIdMap[$plan->id] = $newPlan->id;
 
-            // Copy plan-scoped elements
-            foreach ($plan->elements as $element) {
-                $newEl = $element->replicate(['event_id', 'event_plan_id']);
-                $newEl->event_id = $copy->id;
-                $newEl->event_plan_id = $newPlan->id;
-                $newEl->save();
-            }
+            MapElement::copyCollection($plan->elements, $copy->id, $newPlan->id);
         }
 
-        // Copy shared elements (event_plan_id = null)
-        foreach ($event->elements()->whereNull('event_plan_id')->get() as $element) {
-            $newEl = $element->replicate(['event_id', 'event_plan_id']);
-            $newEl->event_id = $copy->id;
-            $newEl->event_plan_id = null;
-            $newEl->save();
-        }
+        // Shared elements (event_plan_id = null)
+        MapElement::copyCollection(
+            $event->elements()->whereNull('event_plan_id')->get(),
+            $copy->id,
+            null
+        );
 
-        // Copy overlays (physically copy the image files too)
         foreach ($event->overlays as $overlay) {
-            $ext = pathinfo($overlay->image_path, PATHINFO_EXTENSION);
+            $ext     = pathinfo($overlay->image_path, PATHINFO_EXTENSION);
             $newPath = 'overlays/' . \Illuminate\Support\Str::uuid() . ($ext ? '.' . $ext : '');
             \Illuminate\Support\Facades\Storage::disk('public')->copy($overlay->image_path, $newPath);
 
             $copy->overlays()->create([
                 'event_plan_id' => $overlay->event_plan_id ? $planIdMap[$overlay->event_plan_id] : null,
-                'name' => $overlay->name,
-                'image_path' => $newPath,
-                'bounds' => $overlay->bounds,
-                'opacity' => $overlay->opacity,
-                'sort_order' => $overlay->sort_order,
+                'name'          => $overlay->name,
+                'image_path'    => $newPath,
+                'bounds'        => $overlay->bounds,
+                'opacity'       => $overlay->opacity,
+                'sort_order'    => $overlay->sort_order,
             ]);
         }
 

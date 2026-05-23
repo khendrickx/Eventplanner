@@ -203,4 +203,34 @@ class EventCrudTest extends TestCase
         $this->assertNotSame('overlays/original.png', $copyOverlay->image_path);
         Storage::disk('public')->assertExists($copyOverlay->image_path);
     }
+
+    public function test_event_duplicate_preserves_group_hierarchy(): void
+    {
+        $user  = \App\Models\User::factory()->create();
+        $event = \App\Models\Event::factory()->create(['user_id' => $user->id]);
+        $plan  = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        $group = \App\Models\MapElement::factory()->create([
+            'event_id' => $event->id, 'event_plan_id' => $plan->id,
+            'type' => 'group', 'subtype' => null,
+        ]);
+        \App\Models\MapElement::factory()->create([
+            'event_id' => $event->id, 'event_plan_id' => $plan->id,
+            'parent_id' => $group->id,
+        ]);
+
+        $this->actingAs($user)->post(route('events.duplicate', $event))->assertRedirect();
+
+        $copy = \App\Models\Event::where('user_id', $user->id)
+            ->where('id', '!=', $event->id)->firstOrFail();
+
+        $copyElements = $copy->elements()->get();
+        $copyGroup    = $copyElements->firstWhere('type', 'group');
+        $copyChild    = $copyElements->whereNotNull('parent_id')->first();
+
+        $this->assertNotNull($copyGroup);
+        $this->assertNotNull($copyChild);
+        $this->assertEquals($copyGroup->id, $copyChild->parent_id);
+        $this->assertNotEquals($group->id, $copyGroup->id);
+    }
 }
