@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\EventPlanController;
 use App\Http\Controllers\Api\MapElementController;
+use App\Http\Controllers\Api\MapOverlayController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function () {
@@ -16,4 +17,10 @@ Route::middleware('auth')->group(function () {
     Route::post('events/{event}/elements', [MapElementController::class, 'storeShared']);
     Route::patch('elements/{element}', [MapElementController::class, 'update']);
     Route::delete('elements/{element}', [MapElementController::class, 'destroy']);
+
+    Route::get('plans/{plan}/overlays', [MapOverlayController::class, 'indexForPlan']);
+    Route::post('plans/{plan}/overlays', [MapOverlayController::class, 'storeForPlan']);
+    Route::post('events/{event}/overlays', [MapOverlayController::class, 'storeShared']);
+    Route::patch('overlays/{overlay}', [MapOverlayController::class, 'update']);
+    Route::delete('overlays/{overlay}', [MapOverlayController::class, 'destroy']);
 });
