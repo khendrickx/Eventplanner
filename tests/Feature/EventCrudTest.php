@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Event;
+use App\Models\MapOverlay;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class EventCrudTest extends TestCase
@@ -179,5 +181,26 @@ class EventCrudTest extends TestCase
         $copy = Event::where('user_id', $owner->id)->where('id', '!=', $event->id)->first();
         $this->assertCount(2, $copy->plans);
         $this->assertSame('Plan A', $copy->plans->first()->name);
+    }
+
+    public function test_duplicating_event_copies_overlays(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('overlays/original.png', 'fake');
+
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        MapOverlay::factory()->create([
+            'event_id' => $event->id,
+            'image_path' => 'overlays/original.png',
+        ]);
+
+        $this->actingAs($user)->post("/events/{$event->id}/duplicate");
+
+        $this->assertDatabaseCount('map_overlays', 2);
+        $copy = Event::where('user_id', $user->id)->where('id', '!=', $event->id)->first();
+        $copyOverlay = $copy->overlays()->first();
+        $this->assertNotSame('overlays/original.png', $copyOverlay->image_path);
+        Storage::disk('public')->assertExists($copyOverlay->image_path);
     }
 }
