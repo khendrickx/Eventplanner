@@ -1,11 +1,12 @@
 <script setup>
 import { computed, watch, ref } from 'vue'
 import { elementTypesBySubtype, elementTypesByDrawType } from '@/config/elementTypes.js'
+import EquipmentList from './EquipmentList.vue'
 import * as turf from '@turf/turf'
 
 const props = defineProps({
     element: { type: Object, default: null },
-    plans: { type: Array, required: true },
+    plans:   { type: Array,  required: true },
     canEdit: { type: Boolean, default: false },
 })
 
@@ -36,10 +37,10 @@ const measurements = computed(() => {
             return { label: 'Length', value: len >= 1 ? `${len.toFixed(2)} km` : `${(len * 1000).toFixed(0)} m` }
         }
         if (geo.type === 'Polygon') {
-            const area = turf.area({ type: 'Feature', geometry: geo })
+            const area      = turf.area({ type: 'Feature', geometry: geo })
             const perimeter = turf.length({ type: 'Feature', geometry: geo }, { units: 'meters' })
             return [
-                { label: 'Area', value: area >= 10000 ? `${(area / 10000).toFixed(2)} ha` : `${area.toFixed(0)} m²` },
+                { label: 'Area',      value: area >= 10000 ? `${(area / 10000).toFixed(2)} ha` : `${area.toFixed(0)} m²` },
                 { label: 'Perimeter', value: `${perimeter.toFixed(0)} m` },
             ]
         }
@@ -60,6 +61,7 @@ const infraProperties = computed(() => {
 
 <template>
     <div v-if="local" class="w-64 bg-white border-l p-4 overflow-y-auto shrink-0 text-sm space-y-4">
+
         <!-- Name -->
         <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
@@ -72,8 +74,8 @@ const infraProperties = computed(() => {
             />
         </div>
 
-        <!-- Subtype -->
-        <div>
+        <!-- Subtype (hidden for groups — they have no meaningful subtype) -->
+        <div v-if="local.type !== 'group'">
             <label class="block text-xs font-medium text-gray-500 mb-1">Type</label>
             <select
                 :value="local.subtype"
@@ -98,6 +100,18 @@ const infraProperties = computed(() => {
                 <option value="">All plans (shared)</option>
                 <option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
+        </div>
+
+        <!-- Level (only for child elements) -->
+        <div v-if="local.parent_id != null">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Level</label>
+            <input
+                :value="local.properties?.level || ''"
+                :disabled="!canEdit"
+                @blur="saveProperty('level', $event.target.value)"
+                class="w-full border rounded px-2 py-1.5 text-sm disabled:bg-gray-50"
+                placeholder="e.g. Ground floor, Floor 1"
+            />
         </div>
 
         <!-- Infrastructure dimensions -->
@@ -171,24 +185,27 @@ const infraProperties = computed(() => {
             />
         </div>
 
+        <!-- Equipment -->
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Equipment</label>
+            <EquipmentList
+                :items="local.properties?.equipment || []"
+                :can-edit="canEdit"
+                @update="saveProperty('equipment', $event)"
+            />
+        </div>
+
         <!-- Lock / Hide -->
         <div v-if="canEdit" class="flex gap-4">
             <label class="flex items-center gap-2 text-xs cursor-pointer">
-                <input
-                    type="checkbox"
-                    :checked="local.is_locked"
-                    @change="save('is_locked', $event.target.checked)"
-                />
+                <input type="checkbox" :checked="local.is_locked" @change="save('is_locked', $event.target.checked)" />
                 Locked
             </label>
             <label class="flex items-center gap-2 text-xs cursor-pointer">
-                <input
-                    type="checkbox"
-                    :checked="local.is_hidden"
-                    @change="save('is_hidden', $event.target.checked)"
-                />
+                <input type="checkbox" :checked="local.is_hidden" @change="save('is_hidden', $event.target.checked)" />
                 Hidden
             </label>
         </div>
+
     </div>
 </template>
