@@ -16,7 +16,6 @@ import PlanSwitcher from './PlanSwitcher.vue'
 import ElementSidebar from './ElementSidebar.vue'
 import PropertiesPanel from './PropertiesPanel.vue'
 import PlanPropertiesPanel from './PlanPropertiesPanel.vue'
-import OverlayManager from './OverlayManager.vue'
 import axios from 'axios'
 import { useMapExport } from '@/composables/useMapExport.js'
 import { computeBoundsFromElements } from '@/utils/mapBounds.js'
@@ -102,8 +101,8 @@ const plans = ref([...props.initialPlans])
 const activePlanId = ref(null)   // null = shared mode (create elements without a plan)
 const selectedElementId = ref(null)
 const canEdit = props.event.role !== 'viewer'
+const publicToken = props.event.public_token || null
 
-const overlays = ref([])
 const expandedGroupIds = ref([])
 const activePlan = computed(() => plans.value.find(p => p.id === activePlanId.value) || null)
 
@@ -119,7 +118,7 @@ function toggleGroupExpansion(groupId) {
 const { exportPng } = useMapExport(() => map)
 
 const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoStack()
-const { elements, saving, load, create, update, remove } = useMapElements(props.event.id, activePlanId)
+const { elements, saving, load, create, update, remove } = useMapElements(props.event.id, activePlanId, publicToken)
 
 const selectedElement = () => elements.value.find(e => e.id === selectedElementId.value) ?? null
 
@@ -196,9 +195,8 @@ onMounted(async () => {
             }), 'bottom-right')
         }
 
-        await Promise.all([load(), loadOverlays(), loadElementIcons(map)])
+        await Promise.all([load(), loadElementIcons(map)])
         renderElements()
-        renderOverlays()
         fitToElements()
     }
 
@@ -263,41 +261,8 @@ async function switchPlan(planId) {   // planId may be null (deselect → shared
     exitDrawEdit()
     activePlanId.value = planId
     selectedElementId.value = null
-    await Promise.all([load(), loadOverlays()])
+    await load()
     renderElements()
-    renderOverlays()
-}
-
-// ── Overlays ─────────────────────────────────────────────────────────────────
-
-async function loadOverlays() {
-    if (activePlanId.value === null) {
-        overlays.value = []
-        return
-    }
-    const { data } = await axios.get(`/api/plans/${activePlanId.value}/overlays`)
-    overlays.value = data.data
-}
-
-function renderOverlays() {
-    if (!map || !map.isStyleLoaded()) return
-    overlays.value.forEach(overlay => {
-        const sourceId = `overlay-${overlay.id}`
-        const layerId = `overlay-layer-${overlay.id}`
-        const imageUrl = `/storage/${overlay.image_path}`
-        const coords = [
-            [overlay.bounds[0][0], overlay.bounds[1][1]], // NW
-            [overlay.bounds[1][0], overlay.bounds[1][1]], // NE
-            [overlay.bounds[1][0], overlay.bounds[0][1]], // SE
-            [overlay.bounds[0][0], overlay.bounds[0][1]], // SW
-        ]
-        if (!map.getSource(sourceId)) {
-            map.addSource(sourceId, { type: 'image', url: imageUrl, coordinates: coords })
-            map.addLayer({ id: layerId, type: 'raster', source: sourceId, paint: { 'raster-opacity': overlay.opacity } })
-        } else {
-            map.setPaintProperty(layerId, 'raster-opacity', overlay.opacity)
-        }
-    })
 }
 
 function fitToElements() {
@@ -310,26 +275,6 @@ function fitToElements() {
         // animate: false avoids the animation being cancelled by concurrent layer additions (e.g. MapboxDraw)
         map.fitBounds(bounds, { padding: 80, maxZoom: 17, animate: false })
     }
-}
-
-function handleOverlayAdded(overlay) {
-    overlays.value.push(overlay)
-    renderOverlays()
-}
-
-function handleOverlayUpdated(overlay) {
-    const i = overlays.value.findIndex(x => x.id === overlay.id)
-    if (i !== -1) { overlays.value[i] = overlay; renderOverlays() }
-}
-
-function handleOverlayDeleted(id) {
-    if (map) {
-        const layerId = `overlay-layer-${id}`
-        const sourceId = `overlay-${id}`
-        if (map.getLayer(layerId)) map.removeLayer(layerId)
-        if (map.getSource(sourceId)) map.removeSource(sourceId)
-    }
-    overlays.value = overlays.value.filter(o => o.id !== id)
 }
 
 // ── Plan event handlers ──────────────────────────────────────────────────────
@@ -904,17 +849,6 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                     class="pointer-events-none absolute z-10 bg-white/90 border border-gray-200 text-xs px-2 py-1 rounded shadow-sm text-gray-700"
                     :style="{ left: (routeLabelPos.x + 14) + 'px', top: routeLabelPos.y + 'px', transform: 'translateY(-50%)' }"
                 >{{ routeDistanceLabel }}</div>
-            </div>
-            <div class="w-56 border-r bg-white overflow-y-auto shrink-0">
-                <OverlayManager
-                    :event-id="event.id"
-                    :plan-id="activePlanId"
-                    :overlays="overlays"
-                    :can-edit="canEdit"
-                    @added="handleOverlayAdded"
-                    @updated="handleOverlayUpdated"
-                    @deleted="handleOverlayDeleted"
-                />
             </div>
             <PropertiesPanel
                 v-if="selectedElement()"

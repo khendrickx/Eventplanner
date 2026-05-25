@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head, useForm, router } from '@inertiajs/vue3'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
     event: Object,
@@ -17,6 +18,31 @@ const inviteForm = useForm({
     email: '',
     role: 'editor',
 })
+
+// Share link
+const shareEnabled = ref(!!props.event.public_token)
+const sharePassword = ref('')
+const clearPassword = ref(false)
+const publicUrl = computed(() =>
+    props.event.public_token ? `${window.location.origin}/share/${props.event.public_token}` : null
+)
+
+const shareForm = useForm({})
+
+function saveShare() {
+    shareForm
+        .transform(() => ({
+            enabled: shareEnabled.value,
+            password: clearPassword.value ? null : (sharePassword.value || undefined),
+        }))
+        .post(route('events.share.update', props.event.id), {
+            onSuccess: () => { sharePassword.value = ''; clearPassword.value = false },
+        })
+}
+
+function copyLink() {
+    navigator.clipboard.writeText(publicUrl.value)
+}
 
 function removeCollaborator(userId) {
     router.delete(route('events.collaborators.destroy', [props.event.id, userId]))
@@ -116,6 +142,63 @@ function deleteEvent() {
                     </div>
                     <p v-if="inviteForm.errors.email" class="text-red-500 text-sm mt-1">{{ inviteForm.errors.email }}</p>
                 </form>
+            </section>
+
+            <!-- Share link -->
+            <section>
+                <h3 class="font-semibold mb-3">Public Share Link</h3>
+                <div class="space-y-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" v-model="shareEnabled" class="rounded" />
+                        <span class="text-sm">Enable public view-only link</span>
+                    </label>
+
+                    <template v-if="shareEnabled">
+                        <div v-if="publicUrl" class="flex gap-2">
+                            <input
+                                :value="publicUrl"
+                                readonly
+                                class="flex-1 border rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700 font-mono"
+                            />
+                            <button
+                                type="button"
+                                @click="copyLink"
+                                class="px-3 py-2 border rounded-lg text-sm hover:bg-gray-50"
+                            >Copy</button>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium mb-1">
+                                Password
+                                <span v-if="event.has_password" class="text-gray-400 font-normal">(currently set)</span>
+                                <span v-else class="text-gray-400 font-normal">(optional)</span>
+                            </label>
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="sharePassword"
+                                    type="password"
+                                    placeholder="Leave blank to keep / remove password"
+                                    class="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                                />
+                                <button
+                                    v-if="event.has_password"
+                                    type="button"
+                                    @click="clearPassword = !clearPassword"
+                                    :class="['px-3 py-2 border rounded-lg text-sm', clearPassword ? 'bg-red-50 border-red-300 text-red-600' : 'hover:bg-gray-50']"
+                                >{{ clearPassword ? 'Will remove' : 'Remove password' }}</button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <button
+                        type="button"
+                        @click="saveShare"
+                        :disabled="shareForm.processing"
+                        class="px-4 py-2 bg-black text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    >
+                        Save Share Settings
+                    </button>
+                </div>
             </section>
 
             <!-- Danger zone -->

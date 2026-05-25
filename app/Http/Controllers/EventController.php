@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\MapElement;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use App\Http\Requests\StoreEventRequest;
 use App\Http\Requests\UpdateEventRequest;
 use Inertia\Inertia;
@@ -80,10 +82,39 @@ class EventController extends Controller
             ->get(['id', 'email', 'role', 'expires_at']);
 
         return Inertia::render('Events/Edit', [
-            'event' => $event->only('id', 'name', 'description'),
+            'event' => [
+                ...$event->only('id', 'name', 'description'),
+                'public_token'    => $event->public_token,
+                'has_password'    => !is_null($event->public_password_hash),
+            ],
             'collaborators' => $collaborators,
             'pendingInvitations' => $pendingInvitations,
         ]);
+    }
+
+    public function updateShare(\Illuminate\Http\Request $request, Event $event): RedirectResponse
+    {
+        $this->authorize('update', $event);
+
+        $request->validate([
+            'enabled'  => 'required|boolean',
+            'password' => 'nullable|string|max:255',
+        ]);
+
+        if (!$request->boolean('enabled')) {
+            $event->clearPublicToken();
+        } else {
+            if (!$event->public_token) {
+                $event->generatePublicToken();
+            }
+            if ($request->filled('password')) {
+                $event->update(['public_password_hash' => Hash::make($request->password)]);
+            } elseif ($request->has('password') && $request->input('password') === null) {
+                $event->update(['public_password_hash' => null]);
+            }
+        }
+
+        return back();
     }
 
     public function update(UpdateEventRequest $request, Event $event): RedirectResponse
@@ -127,21 +158,6 @@ class EventController extends Controller
             $copy->id,
             null
         );
-
-        foreach ($event->overlays as $overlay) {
-            $ext     = pathinfo($overlay->image_path, PATHINFO_EXTENSION);
-            $newPath = 'overlays/' . \Illuminate\Support\Str::uuid() . ($ext ? '.' . $ext : '');
-            \Illuminate\Support\Facades\Storage::disk('public')->copy($overlay->image_path, $newPath);
-
-            $copy->overlays()->create([
-                'event_plan_id' => $overlay->event_plan_id ? $planIdMap[$overlay->event_plan_id] : null,
-                'name'          => $overlay->name,
-                'image_path'    => $newPath,
-                'bounds'        => $overlay->bounds,
-                'opacity'       => $overlay->opacity,
-                'sort_order'    => $overlay->sort_order,
-            ]);
-        }
 
         return redirect()->route('events.show', $copy);
     }

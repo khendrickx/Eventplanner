@@ -7,12 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Event extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description'];
+    protected $fillable = ['name', 'description', 'public_token', 'public_password_hash'];
+
+    protected $hidden = ['public_password_hash'];
 
     public function user(): BelongsTo
     {
@@ -52,20 +55,14 @@ class Event extends Model
             ->get();
     }
 
-    public function overlays(): HasMany
+    public function generatePublicToken(): void
     {
-        return $this->hasMany(MapOverlay::class);
+        $this->update(['public_token' => (string) Str::uuid()]);
     }
 
-    public function overlaysForPlan(int $planId): \Illuminate\Database\Eloquent\Collection
+    public function clearPublicToken(): void
     {
-        return $this->overlays()
-            ->where(fn ($q) => $q
-                ->where('event_plan_id', $planId)
-                ->orWhereNull('event_plan_id')
-            )
-            ->orderBy('sort_order')
-            ->get();
+        $this->update(['public_token' => null, 'public_password_hash' => null]);
     }
 
     public function isOwnedBy(User $user): bool

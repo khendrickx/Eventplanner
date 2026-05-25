@@ -236,7 +236,6 @@ class MapElementApiTest extends TestCase
 
         // API request must work using the established session (no extra token needed)
         $this->getJson("/api/plans/{$plan->id}/elements")->assertOk();
-        $this->getJson("/api/plans/{$plan->id}/overlays")->assertOk();
     }
 
     public function test_unauthenticated_api_request_returns_401(): void

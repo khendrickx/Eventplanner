@@ -3,15 +3,22 @@ import axios from 'axios'
 
 // planIdRef may be a ref<number|null> or a plain number/null — toValue() handles both.
 // When planId is null (shared/global mode), load ALL event elements and create as shared.
-export function useMapElements(eventId, planIdRef) {
+// publicToken: when set, uses public API routes (no auth) and skips mutating operations.
+export function useMapElements(eventId, planIdRef, publicToken = null) {
     const elements = ref([])
     const saving = ref(false)
 
     async function load() {
         const planId = toValue(planIdRef)
-        const url = planId !== null
-            ? `/api/plans/${planId}/elements`
-            : `/api/events/${eventId}/elements`
+        let url
+        if (publicToken) {
+            if (planId === null) { elements.value = []; return }
+            url = `/api/public/${publicToken}/plans/${planId}/elements`
+        } else {
+            url = planId !== null
+                ? `/api/plans/${planId}/elements`
+                : `/api/events/${eventId}/elements`
+        }
         const { data } = await axios.get(url)
         elements.value = data.data
     }

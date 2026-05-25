@@ -3,7 +3,7 @@
 use App\Http\Controllers\Api\EventExportController;
 use App\Http\Controllers\Api\EventPlanController;
 use App\Http\Controllers\Api\MapElementController;
-use App\Http\Controllers\Api\MapOverlayController;
+use App\Http\Controllers\Api\PublicApiController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -21,10 +21,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('elements/{element}', [MapElementController::class, 'destroy']);
 
     Route::get('plans/{plan}/export/csv', [EventExportController::class, 'csv']);
-
-    Route::get('plans/{plan}/overlays', [MapOverlayController::class, 'indexForPlan']);
-    Route::post('plans/{plan}/overlays', [MapOverlayController::class, 'storeForPlan']);
-    Route::post('events/{event}/overlays', [MapOverlayController::class, 'storeShared']);
-    Route::patch('overlays/{overlay}', [MapOverlayController::class, 'update']);
-    Route::delete('overlays/{overlay}', [MapOverlayController::class, 'destroy']);
 });
+
+// Public routes — no auth required, token-controlled
+Route::get('public/{token}/plans/{plan}/elements', [PublicApiController::class, 'planElements']);
