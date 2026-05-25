@@ -20,6 +20,14 @@ class MapElementController extends Controller
         return response()->json(['data' => $elements]);
     }
 
+    public function indexForEvent(Event $event): JsonResponse
+    {
+        $this->authorize('view', $event);
+
+        $elements = $event->elements()->orderBy('sort_order')->get();
+        return response()->json(['data' => $elements]);
+    }
+
     public function storeForPlan(StoreMapElementRequest $request, EventPlan $plan): JsonResponse
     {
         $this->authorize('editContent', $plan->event);

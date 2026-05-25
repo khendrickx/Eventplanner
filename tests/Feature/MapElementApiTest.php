@@ -224,4 +224,27 @@ class MapElementApiTest extends TestCase
 
         $response->assertUnprocessable();
     }
+
+    public function test_web_session_authenticates_api_requests(): void
+    {
+        $user = User::factory()->create(['password' => bcrypt('password')]);
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        // Simulate a browser login via the web route
+        $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+
+        // API request must work using the established session (no extra token needed)
+        $this->getJson("/api/plans/{$plan->id}/elements")->assertOk();
+        $this->getJson("/api/plans/{$plan->id}/overlays")->assertOk();
+    }
+
+    public function test_unauthenticated_api_request_returns_401(): void
+    {
+        $user = User::factory()->create();
+        $event = Event::factory()->create(['user_id' => $user->id]);
+        $plan = $event->plans()->create(['name' => 'Plan 1', 'sort_order' => 1]);
+
+        $this->getJson("/api/plans/{$plan->id}/elements")->assertUnauthorized();
+    }
 }

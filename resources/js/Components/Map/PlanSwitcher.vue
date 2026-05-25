@@ -5,7 +5,7 @@ import axios from 'axios'
 const props = defineProps({
     eventId: { type: Number, required: true },
     plans: { type: Array, required: true },
-    activePlanId: { type: Number, required: true },
+    activePlanId: { default: null },   // null = shared/all-plans mode
     canEdit: { type: Boolean, default: false },
 })
 
@@ -46,10 +46,22 @@ function startRename(plan) {
     renamingId.value = plan.id
     renameValue.value = plan.name
 }
+
+function selectPlan(plan) {
+    // Clicking the active plan deselects it (back to shared mode)
+    emit('switch', props.activePlanId === plan.id ? null : plan.id)
+}
 </script>
 
 <template>
     <div class="flex items-center gap-1">
+        <!-- "Shared" pill shown when no plan is active -->
+        <span
+            v-if="activePlanId === null"
+            class="px-3 py-1.5 rounded text-xs font-medium bg-indigo-600 text-white"
+            title="Elements will be shared across all plans"
+        >Shared</span>
+
         <template v-for="plan in plans" :key="plan.id">
             <div v-if="renamingId === plan.id" class="flex items-center gap-1">
                 <input
@@ -64,7 +76,7 @@ function startRename(plan) {
             </div>
             <button
                 v-else
-                @click="emit('switch', plan.id)"
+                @click="selectPlan(plan)"
                 @dblclick="canEdit && startRename(plan)"
                 :class="[
                     'px-3 py-1.5 rounded text-xs font-medium transition-colors',
@@ -72,7 +84,7 @@ function startRename(plan) {
                         ? 'bg-black text-white'
                         : 'bg-white text-gray-700 border hover:bg-gray-50'
                 ]"
-                :title="canEdit ? 'Double-click to rename' : ''"
+                :title="activePlanId === plan.id ? 'Click to deselect (shared mode)' : (canEdit ? 'Double-click to rename' : '')"
             >
                 {{ plan.name }}
             </button>

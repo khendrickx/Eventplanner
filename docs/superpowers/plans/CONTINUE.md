@@ -74,6 +74,27 @@ What was added:
 - `PlanPropertiesPanel.vue`: plan name + EquipmentList for plan-level equipment; shown when no element is selected
 - `php artisan storage:link` already run (symlink exists at `public/storage`)
 
+**Plan 5 — Object Library UI + Map Icons: ✅ COMPLETE**
+
+All 82 tests pass. Build clean.
+
+What was added:
+- `resources/js/config/elementIcons.js` — icon library: map of iconKey → `(color) => SVG inner content`. Add icons here only. Exports `iconSvgString()`, `iconDataUrl()`, `iconImage()` helpers.
+- `resources/js/utils/mapIcons.js` — `loadElementIcons(map)`: loops `elementTypes`, registers colored SVG icons with MapLibre via `map.addImage()`.
+- `resources/js/config/elementTypes.js` enriched: each type now has `category`, `subcategory`, and `icon` fields. Exports `CATEGORY_LABELS`, `SUBCATEGORY_LABELS`, and a derived `elementCategories` tree (category → subcategory → types). Renamed `transition_zone` marker subtype to `transition_marker` (was a duplicate ID conflict with the zone).
+- `config/map_elements.php`: updated marker subtype list to use `transition_marker`.
+- `ElementSidebar.vue` redesigned with two tabs:
+  - **Add Objects** — hierarchical category/subcategory/item tree from `elementCategories`, with inline SVG icons. Clicking an item emits `draw` (same event as DrawToolbar). Auto-switches to Placed Objects tab after clicking.
+  - **Placed Objects** — existing folder/element tree (unchanged), now also shows type icons next to each element.
+- `MapEditor.vue`:
+  - Removed `DrawToolbar` import; `@draw="startDraw"` now wired to `ElementSidebar`.
+  - `loadElementIcons(map)` called in `onMapLoad` (parallel with element/overlay loading).
+  - Marker elements rendered via `symbol` layer (`icon-image: ['get', 'subtype']`, `icon-size: 1`) instead of `circle` layer — actual SVG icons appear on the map at placed points.
+
+Registry conventions:
+- **Adding a new icon**: add one entry to `elementIcons.js`. Reference the key in `elementTypes.js`.
+- **Adding a new element type**: add one entry to `elementTypes.js` + one to `config/map_elements.php`. No other changes needed — the Add Objects panel, map icons, and sidebar icons all auto-update.
+
 ---
 
 ## Execution order

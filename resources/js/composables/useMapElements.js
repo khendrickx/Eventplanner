@@ -1,21 +1,27 @@
 import { ref, toValue } from 'vue'
 import axios from 'axios'
 
-// planIdRef may be a ref<number> or a plain number — toValue() handles both
+// planIdRef may be a ref<number|null> or a plain number/null — toValue() handles both.
+// When planId is null (shared/global mode), load ALL event elements and create as shared.
 export function useMapElements(eventId, planIdRef) {
     const elements = ref([])
     const saving = ref(false)
 
     async function load() {
-        const { data } = await axios.get(`/api/plans/${toValue(planIdRef)}/elements`)
+        const planId = toValue(planIdRef)
+        const url = planId !== null
+            ? `/api/plans/${planId}/elements`
+            : `/api/events/${eventId}/elements`
+        const { data } = await axios.get(url)
         elements.value = data.data
     }
 
     async function create(payload, { forPlan = true } = {}) {
         saving.value = true
         try {
-            const url = forPlan
-                ? `/api/plans/${toValue(planIdRef)}/elements`
+            const planId = toValue(planIdRef)
+            const url = (forPlan && planId !== null)
+                ? `/api/plans/${planId}/elements`
                 : `/api/events/${eventId}/elements`
             const { data } = await axios.post(url, payload)
             elements.value.push(data)

@@ -10,7 +10,7 @@ const props = defineProps({
     canEdit: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update'])
+const emit = defineEmits(['update', 'delete', 'live-name'])
 
 const local = ref(null)
 
@@ -57,6 +57,20 @@ const infraProperties = computed(() => {
     if (!local.value || local.value.type !== 'infrastructure') return []
     return elementTypesBySubtype[local.value.subtype]?.properties || []
 })
+
+const coordLat = computed(() =>
+    local.value?.geometry?.type === 'Point' ? local.value.geometry.coordinates[1].toFixed(6) : '')
+const coordLng = computed(() =>
+    local.value?.geometry?.type === 'Point' ? local.value.geometry.coordinates[0].toFixed(6) : '')
+
+function saveCoord(axis, raw) {
+    const value = parseFloat(raw)
+    if (!local.value || !isFinite(value)) return
+    const coords = [...local.value.geometry.coordinates]
+    if (axis === 'lat') coords[1] = value
+    else coords[0] = value
+    emit('update', { id: local.value.id, geometry: { ...local.value.geometry, coordinates: coords } })
+}
 </script>
 
 <template>
@@ -69,6 +83,7 @@ const infraProperties = computed(() => {
                 :value="local.name || ''"
                 :disabled="!canEdit"
                 @blur="save('name', $event.target.value)"
+                @input="e => emit('live-name', e.target.value)"
                 class="w-full border rounded px-2 py-1.5 text-sm disabled:bg-gray-50"
                 placeholder="Label (optional)"
             />
@@ -143,6 +158,40 @@ const infraProperties = computed(() => {
             </p>
         </div>
 
+        <!-- Coordinates (markers only) -->
+        <div v-if="local.geometry?.type === 'Point'">
+            <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-medium text-gray-500">Coordinates</label>
+                <button
+                    @click="navigator.clipboard.writeText(`${coordLat}, ${coordLng}`)"
+                    class="text-[10px] text-gray-400 hover:text-blue-600 transition-colors"
+                    title="Copy to clipboard"
+                >Copy</button>
+            </div>
+            <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="text-xs text-gray-400 block mb-0.5">Lat</label>
+                    <input
+                        type="number" step="any"
+                        :value="coordLat"
+                        :disabled="!canEdit"
+                        @change="saveCoord('lat', $event.target.value)"
+                        class="w-full border rounded px-2 py-1 text-xs disabled:bg-gray-50"
+                    />
+                </div>
+                <div class="flex-1">
+                    <label class="text-xs text-gray-400 block mb-0.5">Lng</label>
+                    <input
+                        type="number" step="any"
+                        :value="coordLng"
+                        :disabled="!canEdit"
+                        @change="saveCoord('lng', $event.target.value)"
+                        class="w-full border rounded px-2 py-1 text-xs disabled:bg-gray-50"
+                    />
+                </div>
+            </div>
+        </div>
+
         <!-- Styling -->
         <div v-if="canEdit">
             <label class="block text-xs font-medium text-gray-500 mb-1">Colour</label>
@@ -168,6 +217,19 @@ const infraProperties = computed(() => {
                         @change="saveProperty('styling', { ...(local.properties?.styling || {}), opacity: parseFloat($event.target.value) })"
                         class="w-20"
                     />
+                </label>
+            </div>
+            <div v-if="local.type !== 'marker'" class="mt-2">
+                <label class="text-xs text-gray-500">Line style
+                    <select
+                        :value="local.properties?.styling?.stroke_type || 'solid'"
+                        @change="saveProperty('styling', { ...(local.properties?.styling || {}), stroke_type: $event.target.value })"
+                        class="ml-1 text-xs border rounded px-1.5 py-0.5"
+                    >
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                    </select>
                 </label>
             </div>
         </div>
@@ -205,6 +267,14 @@ const infraProperties = computed(() => {
                 <input type="checkbox" :checked="local.is_hidden" @change="save('is_hidden', $event.target.checked)" />
                 Hidden
             </label>
+        </div>
+
+        <!-- Delete -->
+        <div v-if="canEdit" class="pt-2 border-t">
+            <button
+                @click="emit('delete', local.id)"
+                class="w-full text-xs border border-red-300 text-red-600 rounded px-2 py-1.5 hover:bg-red-50"
+            >Delete element</button>
         </div>
 
     </div>
