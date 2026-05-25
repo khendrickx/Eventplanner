@@ -18,8 +18,10 @@ import PropertiesPanel from './PropertiesPanel.vue'
 import PlanPropertiesPanel from './PlanPropertiesPanel.vue'
 import axios from 'axios'
 import { useMapExport } from '@/composables/useMapExport.js'
+import { useRouteDistanceTracker } from '@/composables/useRouteDistanceTracker.js'
+import { useElementRenderer } from '@/composables/useElementRenderer.js'
+import { useDrawStateMachine } from '@/composables/useDrawStateMachine.js'
 import { computeBoundsFromElements } from '@/utils/mapBounds.js'
-import { length as turfLength } from '@turf/turf'
 import { loadElementIcons } from '@/utils/mapIcons.js'
 
 const props = defineProps({
@@ -31,71 +33,6 @@ const mapContainer = ref(null)
 const gpxFileInput = ref(null)
 let map = null
 let draw = null
-let drawEditingId = null
-let drawEditingDrawId = null
-let prevDrawMode = null       // track draw mode transitions
-let _drawCreatePending = false // suppress element clicks while create is in flight
-
-// ── Route distance tracking ───────────────────────────────────────────────────
-const routeDistanceLabel = ref(null)
-const routeLabelPos = ref({ x: 0, y: 0 })
-let routeMouseMoveListener = null
-let routeEditMoveListener = null
-
-function startRouteEditDistanceTracking() {
-    if (routeEditMoveListener) map.off('mousemove', routeEditMoveListener)
-    routeEditMoveListener = (e) => {
-        if (!drawEditingDrawId || !draw) return
-        const feat = draw.get(drawEditingDrawId)
-        if (!feat || feat.geometry.type !== 'LineString') { routeDistanceLabel.value = null; return }
-        const coords = feat.geometry.coordinates
-        if (coords.length < 2) { routeDistanceLabel.value = null; return }
-        const km = turfLength({ type: 'Feature', geometry: feat.geometry }, { units: 'kilometers' })
-        routeDistanceLabel.value = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(2)} km`
-        routeLabelPos.value = { x: e.point.x, y: e.point.y }
-    }
-    map.on('mousemove', routeEditMoveListener)
-    routeEditMoveListener()   // show immediately
-}
-
-function stopRouteEditDistanceTracking() {
-    if (routeEditMoveListener) {
-        map?.off('mousemove', routeEditMoveListener)
-        routeEditMoveListener = null
-        routeDistanceLabel.value = null
-    }
-}
-
-function startRouteDistanceTracking() {
-    stopRouteDistanceTracking()
-    routeMouseMoveListener = (e) => {
-        if (!draw || draw.getMode() !== 'draw_line_string') {
-            stopRouteDistanceTracking()
-            return
-        }
-        const features = draw.getAll().features
-        const line = features.find(f => f.geometry.type === 'LineString')
-        if (!line || line.geometry.coordinates.length < 1) {
-            routeDistanceLabel.value = null
-            return
-        }
-        const coords = [...line.geometry.coordinates, [e.lngLat.lng, e.lngLat.lat]]
-        if (coords.length < 2) return
-        const km = turfLength({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }, { units: 'kilometers' })
-        routeDistanceLabel.value = km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(2)} km`
-        const px = map.project(e.lngLat)
-        routeLabelPos.value = { x: px.x, y: px.y }
-    }
-    map.on('mousemove', routeMouseMoveListener)
-}
-
-function stopRouteDistanceTracking() {
-    if (routeMouseMoveListener) {
-        map?.off('mousemove', routeMouseMoveListener)
-        routeMouseMoveListener = null
-    }
-    routeDistanceLabel.value = null
-}
 
 const plans = ref([...props.initialPlans])
 const activePlanId = ref(null)   // null = shared mode (create elements without a plan)
@@ -119,6 +56,34 @@ const { exportPng } = useMapExport(() => map)
 
 const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoStack()
 const { elements, saving, load, create, update, remove } = useMapElements(props.event.id, activePlanId, publicToken)
+
+const tracker = useRouteDistanceTracker(() => map, () => draw)
+const { routeDistanceLabel, routeLabelPos } = tracker
+
+const renderer = useElementRenderer(() => map)
+
+const drawMachine = useDrawStateMachine({
+    getDraw: () => draw,
+    elements,
+    expandedGroupIds,
+    selectedElementId,
+    renderElements,
+    create, update, remove,
+    pushUndo,
+    routeTracker: tracker,
+})
+const {
+    drawEditingId,
+    drawCreatePending,
+    startDraw,
+    enterDrawEdit,
+    exitDrawEdit,
+    onDrawCreate,
+    onDrawUpdate,
+    onDrawDelete,
+    onDrawSelection,
+    onModeChange,
+} = drawMachine
 
 const selectedElement = () => elements.value.find(e => e.id === selectedElementId.value) ?? null
 
@@ -153,13 +118,7 @@ onMounted(async () => {
         map.on('draw.update', onDrawUpdate)
         map.on('draw.delete', onDrawDelete)
         map.on('draw.selectionchange', onDrawSelection)
-        // Exit draw-edit when user clicks outside a polygon (direct_select → simple_select)
-        map.on('draw.modechange', (e) => {
-            if (prevDrawMode === 'direct_select' && e.mode === 'simple_select' && drawEditingId !== null) {
-                exitDrawEdit()
-            }
-            prevDrawMode = e.mode
-        })
+        map.on('draw.modechange', onModeChange)
     }
 
     const onMapLoad = async () => {
@@ -196,6 +155,7 @@ onMounted(async () => {
         }
 
         await Promise.all([load(), loadElementIcons(map)])
+        renderer.initLayers(onClickElement, onClickEmpty)
         renderElements()
         fitToElements()
     }
@@ -207,7 +167,7 @@ onMounted(async () => {
     }
 })
 
-onUnmounted(() => { stopRouteDistanceTracking(); stopRouteEditDistanceTracking(); map?.remove(); map = null })
+onUnmounted(() => { tracker.cleanup(); map?.remove(); map = null })
 
 // ── GPX import ───────────────────────────────────────────────────────────────
 
@@ -294,369 +254,29 @@ function handlePlanDeleted(id) {
     if (activePlanId.value === id && plans.value.length > 0) switchPlan(plans.value[0].id)
 }
 
-// ── Drawing ──────────────────────────────────────────────────────────────────
-
-let pendingSubtype = null
-let pendingType = null
-
-function startDraw({ mode, subtype }) {
-    exitDrawEdit()
-    pendingSubtype = subtype
-    pendingType = mode
-
-    const typeDef = elementTypesBySubtype[subtype]
-    const drawMode = typeDef?.drawMode
-        || (mode === 'marker'
-            ? 'draw_point'
-            : mode === 'route'
-                ? 'draw_line_string'
-                : mode === 'infrastructure'
-                    ? 'draw_rectangle'
-                    : 'draw_polygon')
-
-    draw.changeMode(drawMode)
-    if (mode === 'route') startRouteDistanceTracking()
-}
-
-async function onDrawCreate(e) {
-    _drawCreatePending = true
-    stopRouteDistanceTracking()
-    const feature    = e.features[0]
-    const subtypeKey = pendingSubtype || (pendingType === 'group' ? 'group' : null)
-    const typeDef    = subtypeKey ? elementTypesBySubtype[subtypeKey] : null
-    const defaultStyle = typeDef?.defaultStyle || {}
-
-    const activeEl = selectedElement()
-    const parentId = (activeEl?.type === 'group') ? activeEl.id : null
-
-    const newEl = await create({
-        type:       pendingType || featureType(feature),
-        subtype:    pendingSubtype || null,
-        geometry:   feature.geometry,
-        properties: { styling: defaultStyle },
-        parent_id:  parentId,
-    })
-
-    draw.delete(feature.id)
-    _drawCreatePending = false
-    renderElements()
-    selectedElementId.value = newEl.id
-
-    if (parentId && !expandedGroupIds.value.includes(parentId)) {
-        toggleGroupExpansion(parentId)
-    }
-
-    pushUndo(async () => {
-        await remove(newEl.id)
-        renderElements()
-        selectedElementId.value = null
-    })
-}
-
-async function onDrawUpdate(e) {
-    const feature = e.features[0]
-    // _elId may come back as a number or (rarely) string — normalise to number.
-    const elId = Number(feature.properties._elId)
-    const idx = elements.value.findIndex(el => el.id === elId)
-    if (idx === -1) return
-
-    const prev = { ...elements.value[idx] }
-
-    // Optimistic local update so exitDrawEdit's renderElements sees the new geometry
-    // even if the server response hasn't arrived yet.
-    elements.value[idx] = { ...elements.value[idx], geometry: feature.geometry }
-    renderElements()
-
-    const newGeometry = feature.geometry
-    pushUndo(
-        async () => { exitDrawEdit(); await update(prev.id, { geometry: prev.geometry }); renderElements() },
-        async () => { await update(prev.id, { geometry: newGeometry }); renderElements() },
-    )
-
-    await update(prev.id, { geometry: feature.geometry })
-}
-
-async function onDrawDelete(e) {
-    stopRouteDistanceTracking()
-    const feature = e.features[0]
-    const el = elements.value.find(el => el.id === feature.properties._elId)
-    if (!el) return
-
-    drawEditingId = null
-    drawEditingDrawId = null
-    const snapshot = { ...el }
-    await remove(el.id)
-    renderElements()
-
-    pushUndo(async () => {
-        const restored = await create({ ...snapshot, id: undefined })
-        renderElements()
-        selectedElementId.value = restored.id
-    })
-}
-
-function onDrawSelection(e) {
-    if (e.features.length > 0) {
-        const elId = Number(e.features[0].properties._elId) || null
-        selectedElementId.value = elId
-    } else {
-        // direct_select mode doesn't report a selection — guard against spurious exits
-        if (draw?.getMode() !== 'direct_select') {
-            selectedElementId.value = null
-            exitDrawEdit()
-        }
-    }
-}
-
-function featureType(feature) {
-    const typeMap = { Point: 'marker', LineString: 'route', Polygon: 'zone' }
-    return typeMap[feature.geometry.type] || 'marker'
-}
-
-// ── Draw editing ──────────────────────────────────────────────────────────────
-
-function enterDrawEdit(el) {
-    const feature = {
-        type: 'Feature',
-        properties: { _elId: el.id },
-        geometry: el.geometry,
-    }
-    const [drawFeatureId] = draw.add(feature)
-    drawEditingId = el.id
-    drawEditingDrawId = drawFeatureId
-    renderElements()
-    // Defer the mode change so it runs after the current click event finishes
-    // processing inside MapboxDraw. Calling draw.changeMode() synchronously
-    // inside a MapLibre layer-click handler causes MapboxDraw to re-process the
-    // same click in the new mode, which throws an internal error and leaves the
-    // element invisible. Wrapping in try/catch suppresses the benign error.
-    setTimeout(() => {
-        if (drawEditingId !== el.id) return // guard: exited before timeout fired
-        try {
-            if (el.geometry.type === 'Point') {
-                draw.changeMode('simple_select', { featureIds: [drawFeatureId] })
-            } else if (el.geometry.type === 'LineString') {
-                draw.changeMode('direct_select', { featureId: drawFeatureId })
-                startRouteEditDistanceTracking()
-            } else {
-                draw.changeMode('direct_select', { featureId: drawFeatureId })
-            }
-        } catch {
-            // MapboxDraw may throw an internal error when changeMode is called
-            // shortly after a user click. The feature is still added to the draw
-            // layer via draw.add(), so editing still works. exitDrawEdit() handles
-            // cleanup when the user clicks away.
-        }
-    }, 0)
-}
-
-function exitDrawEdit() {
-    if (drawEditingId === null) return
-    stopRouteEditDistanceTracking()
-    const exitingId = drawEditingId
-
-    // Sync the latest draw-layer geometry back into elements.value before clearing.
-    // This is the safety net for cases where onDrawUpdate missed the move
-    // (e.g. type coercion edge-cases or rapid click-away sequences).
-    if (drawEditingDrawId !== null) {
-        const drawFeature = draw.get(drawEditingDrawId)
-        if (drawFeature) {
-            const idx = elements.value.findIndex(e => e.id === exitingId)
-            if (idx !== -1) {
-                const cur = JSON.stringify(elements.value[idx].geometry)
-                const nxt = JSON.stringify(drawFeature.geometry)
-                if (cur !== nxt) {
-                    elements.value[idx] = { ...elements.value[idx], geometry: drawFeature.geometry }
-                    update(exitingId, { geometry: drawFeature.geometry })
-                }
-            }
-        }
-        drawEditingDrawId = null
-    }
-
-    drawEditingId = null
-    draw.deleteAll()
-    renderElements()
-}
-
 // ── Rendering ────────────────────────────────────────────────────────────────
 
-function renderElements() {
-    if (!map || !map.isStyleLoaded()) return
-
-    const sourceId = 'elements'
-    const visibleEls = elements.value.filter(el => {
-        if (el.type === 'group') return false        // folders are sidebar-only, no map geometry
-        if (el.id === drawEditingId) return false
-        if (el.is_hidden) return false
-        if (el.parent_id != null) return expandedGroupIds.value.includes(el.parent_id)
-        return true
-    })
-
-    const geojson = {
-        type: 'FeatureCollection',
-        features: visibleEls.map(el => ({
-            type: 'Feature',
-            id: el.id,
-            properties: {
-                _elId: el.id,
-                type: el.type,
-                subtype: el.subtype,
-                elementName: el.name || '',
-                fillColor: el.properties?.styling?.fill_color || elementTypesBySubtype[el.subtype]?.defaultStyle?.color || '#3b82f6',
-                strokeColor: el.properties?.styling?.stroke_color || '#1d4ed8',
-                opacity: el.properties?.styling?.opacity ?? 0.4,
-                lineWidth: elementTypesBySubtype[el.subtype]?.defaultStyle?.width || 2,
-                strokeType: el.properties?.styling?.stroke_type || 'solid',
-            },
-            geometry: el.geometry,
-        })),
-    }
-
-    if (map.getSource(sourceId)) {
-        map.getSource(sourceId).setData(geojson)
-    } else {
-        map.addSource(sourceId, { type: 'geojson', data: geojson })
-
-        map.addLayer({
-            id: 'elements-fill',
-            type: 'fill',
-            source: sourceId,
-            filter: ['==', ['geometry-type'], 'Polygon'],
-            paint: {
-                'fill-color': ['get', 'fillColor'],
-                'fill-opacity': ['get', 'opacity'],
-            },
-        })
-            // Solid lines (default)
-            map.addLayer({
-                id: 'elements-line',
-                type: 'line',
-                source: sourceId,
-                filter: ['all',
-                    ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
-                    ['!', ['in', ['get', 'strokeType'], ['literal', ['dashed', 'dotted']]]],
-                ],
-                paint: {
-                    'line-color': ['get', 'strokeColor'],
-                    'line-width': ['get', 'lineWidth'],
-                },
-            })
-            // Dashed lines
-            map.addLayer({
-                id: 'elements-line-dashed',
-                type: 'line',
-                source: sourceId,
-                filter: ['all',
-                    ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
-                    ['==', ['get', 'strokeType'], 'dashed'],
-                ],
-                paint: {
-                    'line-color': ['get', 'strokeColor'],
-                    'line-width': ['get', 'lineWidth'],
-                    'line-dasharray': [6, 4],
-                },
-            })
-            // Dotted lines
-            map.addLayer({
-                id: 'elements-line-dotted',
-                type: 'line',
-                source: sourceId,
-                filter: ['all',
-                    ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
-                    ['==', ['get', 'strokeType'], 'dotted'],
-                ],
-                paint: {
-                    'line-color': ['get', 'strokeColor'],
-                    'line-width': ['get', 'lineWidth'],
-                    'line-dasharray': [1, 5],
-                },
-            })
-            // Symbol icons for all markers except text labels
-            map.addLayer({
-                id: 'elements-symbol',
-                type: 'symbol',
-                source: sourceId,
-                filter: ['all',
-                    ['==', ['geometry-type'], 'Point'],
-                    ['!=', ['get', 'subtype'], 'text_label'],
-                ],
-                layout: {
-                    'icon-image': ['get', 'subtype'],
-                    'icon-size': 1,
-                    'icon-allow-overlap': true,
-                    'icon-ignore-placement': true,
-                },
-            })
-            // Text labels
-            map.addLayer({
-                id: 'elements-text-label',
-                type: 'symbol',
-                source: sourceId,
-                filter: ['all',
-                    ['==', ['geometry-type'], 'Point'],
-                    ['==', ['get', 'subtype'], 'text_label'],
-                ],
-                layout: {
-                    'text-field': ['case',
-                        ['!=', ['get', 'elementName'], ''], ['get', 'elementName'],
-                        'Text',
-                    ],
-                    'text-size': 14,
-                    'text-anchor': 'center',
-                    'text-allow-overlap': true,
-                    'text-ignore-placement': true,
-                },
-                paint: {
-                    'text-color': ['get', 'fillColor'],
-                    'text-halo-color': '#ffffff',
-                    'text-halo-width': 2,
-                },
-            })
-
-            const onElementClick = (e) => {
-                // Ignore clicks while a draw-create is resolving (prevents group intercept)
-                if (_drawCreatePending) return
-                // Ignore clicks while actively drawing a new element
-                const mode = draw?.getMode()
-                if (mode && !['simple_select', 'direct_select'].includes(mode)) return
-                const elId = e.features[0].properties._elId
-                selectedElementId.value = elId
-            if (canEdit) {
-                const el = elements.value.find(el => el.id === elId)
-                if (el && !el.is_locked) {
-                    if (drawEditingId !== null && drawEditingId !== elId) exitDrawEdit()
-                    if (drawEditingId === null) enterDrawEdit(el)
-                }
-            }
+function onClickElement(elId) {
+    if (drawCreatePending.value) return
+    const mode = draw?.getMode()
+    if (mode && !['simple_select', 'direct_select'].includes(mode)) return
+    selectedElementId.value = elId
+    if (canEdit) {
+        const el = elements.value.find(el => el.id === elId)
+        if (el && !el.is_locked) {
+            if (drawEditingId.value !== null && drawEditingId.value !== elId) exitDrawEdit()
+            if (drawEditingId.value === null) enterDrawEdit(el)
         }
-        map.on('click', 'elements-symbol', onElementClick)
-        map.on('click', 'elements-text-label', onElementClick)
-        map.on('click', 'elements-fill', onElementClick)
-        map.on('click', 'elements-line', onElementClick)
-        map.on('click', 'elements-line-dashed', onElementClick)
-        map.on('click', 'elements-line-dotted', onElementClick)
-
-        // Deselect when clicking empty map area. The layer-specific handlers
-        // above set _elementClickedThisFrame = true; if the general handler
-        // sees it was not set, the click landed on empty map.
-        let _elementClickedThisFrame = false
-        const _markElementClick = (e) => { _elementClickedThisFrame = true }
-        map.on('click', 'elements-symbol', _markElementClick)
-        map.on('click', 'elements-text-label', _markElementClick)
-        map.on('click', 'elements-fill', _markElementClick)
-        map.on('click', 'elements-line', _markElementClick)
-        map.on('click', 'elements-line-dashed', _markElementClick)
-        map.on('click', 'elements-line-dotted', _markElementClick)
-        map.on('click', () => {
-            if (_elementClickedThisFrame) {
-                _elementClickedThisFrame = false
-                return
-            }
-            selectedElementId.value = null
-            exitDrawEdit()
-        })
     }
+}
+
+function onClickEmpty() {
+    selectedElementId.value = null
+    exitDrawEdit()
+}
+
+function renderElements() {
+    renderer.render(elements.value, drawEditingId.value, expandedGroupIds.value)
 }
 
 // ── Element updates from PropertiesPanel ─────────────────────────────────────
