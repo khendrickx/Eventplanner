@@ -127,15 +127,22 @@ export function useElementRenderer(getMap) {
         })
     }
 
-    function render(elements, drawEditingId, expandedGroupIds) {
+    function render(elements, drawEditingId) {
         const map = getMap()
         if (!map?.getSource('elements')) return
+
+        const groupsById = Object.fromEntries(
+            elements.filter(el => el.type === 'group').map(el => [el.id, el])
+        )
 
         const visibleEls = elements.filter(el => {
             if (el.type === 'group') return false
             if (el.id === drawEditingId) return false
             if (el.is_hidden) return false
-            if (el.parent_id != null) return expandedGroupIds.includes(el.parent_id)
+            if (el.parent_id != null) {
+                const parent = groupsById[el.parent_id]
+                return parent && !parent.is_hidden
+            }
             return true
         })
 

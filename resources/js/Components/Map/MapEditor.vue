@@ -124,10 +124,23 @@ onMounted(async () => {
     const onMapLoad = async () => {
         map.resize() // Sync canvas to actual container dimensions (flex layout may finish after init)
 
-        // Add all WMTS/XYZ overlay layers from the registry (hidden by default)
-        // The LayerControl plugin lets users toggle them and adjust opacity.
+        // Load data and init element/draw layers first so overlay rasters can be
+        // anchored below them. MapboxDraw layers ('gl-draw-*') were registered before
+        // this handler and are already in the style at this point.
+        await Promise.all([load(), loadElementIcons(map)])
+        renderer.initLayers(onClickElement, onClickEmpty)
+        renderElements()
+        fitToElements()
+
+        // Insert WMTS/XYZ overlays below draw/element layers so they never occlude
+        // selected features (which are rendered by MapboxDraw when being edited).
         const overlayDefs = mapLayers.filter(l => l.type === 'wmts' || l.type === 'xyz')
         const layerStates = {}
+        // Anchor overlays below draw layers (if present) or element layers.
+        // Check dynamically — draw layer presence depends on edit mode and timing.
+        const styleLayerIds = map.getStyle().layers.map(l => l.id)
+        const firstDrawLayerId = styleLayerIds.find(id => id.startsWith('gl-draw-'))
+        const overlayAnchor = firstDrawLayerId ?? 'elements-fill'
         for (const ol of overlayDefs) {
             map.addSource(`overlay-${ol.id}`, {
                 type: 'raster',
@@ -140,7 +153,7 @@ onMounted(async () => {
                 type: 'raster',
                 source: `overlay-${ol.id}`,
                 layout: { visibility: 'none' },
-            })
+            }, overlayAnchor)
             layerStates[ol.id] = { visible: false, opacity: 1, name: ol.label }
         }
         if (overlayDefs.length > 0) {
@@ -153,11 +166,6 @@ onMounted(async () => {
                 collapsed: true,
             }), 'bottom-right')
         }
-
-        await Promise.all([load(), loadElementIcons(map)])
-        renderer.initLayers(onClickElement, onClickEmpty)
-        renderElements()
-        fitToElements()
     }
 
     if (map.isStyleLoaded()) {
@@ -276,7 +284,7 @@ function onClickEmpty() {
 }
 
 function renderElements() {
-    renderer.render(elements.value, drawEditingId.value, expandedGroupIds.value)
+    renderer.render(elements.value, drawEditingId.value)
 }
 
 // ── Element updates from PropertiesPanel ─────────────────────────────────────

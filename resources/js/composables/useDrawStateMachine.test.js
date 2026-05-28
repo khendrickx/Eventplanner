@@ -181,6 +181,35 @@ describe('exitDrawEdit', () => {
     })
 })
 
+// ── element visibility after deselection ─────────────────────────────────────
+
+describe('element visibility after deselection', () => {
+    it('renderElements is called with drawEditingId already null so element is not filtered out', () => {
+        const { draw, elements, machine, renderElements } = makeCtx()
+        const el = { id: 1, geometry: { type: 'Point', coordinates: [4, 51] } }
+        elements.value = [el]
+        draw.get.mockReturnValue(null)
+        draw.getMode.mockReturnValue('simple_select')
+
+        machine.enterDrawEdit(el)
+        renderElements.mockClear()
+
+        // Track drawEditingId at the moment renderElements fires
+        let drawIdAtRender = 'not-called'
+        renderElements.mockImplementation(() => {
+            drawIdAtRender = machine.drawEditingId.value
+        })
+
+        // Simulate MapboxDraw firing selectionchange when user clicks empty space
+        machine.onDrawSelection({ features: [] })
+
+        // The render must happen with drawEditingId === null so the element
+        // passes the `el.id === drawEditingId` filter in useElementRenderer
+        expect(drawIdAtRender).toBeNull()
+        expect(renderElements).toHaveBeenCalledOnce()
+    })
+})
+
 // ── onDrawUpdate ──────────────────────────────────────────────────────────────
 
 describe('onDrawUpdate', () => {
